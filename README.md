@@ -44,8 +44,7 @@ These files provide comprehensive data about the security state of AWS resources
 
 Here's what you need to install to use the AWS CDK.
 
-# Validating Python 3.7 or later, pip, virtualenv, and Node.js Installation on Linux
-# If you are using the container for the automated SCAP scan you will also need docker for the install.
+Validating Python 3.7 or later, pip, virtualenv, and Node.js Installation on Linux
 
 #### Node.js
 
