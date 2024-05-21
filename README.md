@@ -60,7 +60,7 @@ Other prerequisites depend on the language in which you develop AWS CDK applicat
 
 - Python 3.7 or later including pip and virtualenv
 
-# Check Python Version
+#### Check Python Version
 ```bash
 python3 --version
 ```
