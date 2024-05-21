@@ -1,0 +1,10 @@
+aws-cdk-lib
+constructs>=10.0.0,<11.0.0
+boto3
+botocore
+pylint
+black
+prettier_printer
+awswrangler
+jsii
+cdk_nag
