@@ -41,6 +41,7 @@ from aws_cdk import CfnOutput
 from aws_cdk import Duration
 from aws_cdk import RemovalPolicy
 from aws_cdk import Stack
+from aws_cdk import Size
 from constructs import Construct
 import os
 
@@ -753,6 +754,7 @@ class ShcaStack(Stack):
             handler="lambda_function.lambda_handler",
             timeout=Duration.minutes(1),
             memory_size=2048,
+            ephemeral_storage_size=Size.gibibytes(2),
             # The following line is required to NeoLifter rule BC_AWS_GENERAL_65
             # "Ensure that AWS Lambda function is configured inside a VPC"
             vpc=self.vpc,
