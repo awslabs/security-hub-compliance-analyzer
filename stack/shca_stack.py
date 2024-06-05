@@ -184,7 +184,7 @@ class ShcaStack(Stack):
                 ec2.SubnetConfiguration(
                     subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
                     name="Private Isolated",
-                    cidr_mask=24,
+                    cidr_mask=26,
                 ),
             ],
             flow_logs={

@@ -43,8 +43,8 @@
     "@aws-cdk/aws-apigateway:requestValidatorUniqueId": true,
     "@aws-cdk/aws-kms:aliasNameRef": true,
     "@aws-cdk/core:includePrefixInUniqueNameGeneration": true,
-    "environment": "shca-",
-    "vpc_cidr": "10.30.0.0/20",
+    "environment": "shca",
+    "vpc_cidr": "10.30.0.0/24",
     "schedule_frequency_days": 1,
     "send_failure_notification_email": false,
     "failure_notification_email": "youremail@yourdomain.com"
