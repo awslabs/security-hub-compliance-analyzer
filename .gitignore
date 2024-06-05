@@ -1,0 +1,7 @@
+.venv
+.DS_Store
+.cdk.staging
+cdk.out
+*.cdk.out
+assets/lambda/layers/awswrangler/*.zip
+cdk.context.json

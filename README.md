@@ -151,8 +151,8 @@ $ cdk synth
 ## Deployment Instructions
 
 Modify the following values in `cdk.json`
-    - "environment": `"scca-internal-shca"`  - Give this a descriptive name for the SHCA deployment. This can be any value and does not impact functionality. It is to label SHCA resources within the AWS Account. 
-    - "vpc_cidr": `"10.10.0.0/20"` - Sets the CIDR range for a small VPC created for the Lambda functions to run in, as to not create the [[Lambda.3] Lambda functions should be in a VPC finding](https://docs.aws.amazon.com/securityhub/latest/userguide/lambda-controls.html#lambda-3). You do not need to alter this value. 
+    - "environment": `"shca"`  - Give this a descriptive name for the SHCA deployment. This can be any value and does not impact functionality. It is to label SHCA resources within the AWS Account. 
+    - "vpc_cidr": `"10.30.0.0/24"` - Sets the CIDR range for a small VPC created for the Lambda functions to run in, as to not create the [[Lambda.3] Lambda functions should be in a VPC finding](https://docs.aws.amazon.com/securityhub/latest/userguide/lambda-controls.html#lambda-3). Select a CIDR range not already in use within your environment. 
     - "schedule_frequency_days": `7` - This setting dictates how often would you like SHCA to generate compliance reporting. 
     - "send_failure_notification_email": `true` or `false` - If `true`, email will be sent to the address provided in `failure_notification_email`.
     - "failure_notification_email": `example@email.com` - This email address will receive notifications upon a failure to execute SHCA.
@@ -161,13 +161,13 @@ From here you have two options on how to install SHCA (CloudShell or CDK)
 
 ## CloudShell Deployment Instructions 
 
-If you do not have access to a laptop or development environment where you are able to install the pre-requisites above, the CloudShell service may be used to deploy SHCA. Additionally, by using temporary credentials from AWS IAM Identity Center, we can use a single CloudShell in an IL2 account to make CloudFormation API calls and deploy code into any account that you have access to. 
+If you do not have access to a laptop or development environment where you are able to install the pre-requisites above, the CloudShell service may be used to deploy SHCA. Additionally, by using temporary credentials from AWS IAM Identity Center, we can use a single CloudShell in an account to make CloudFormation API calls and deploy code into any account that you have access to. 
 
-CloudShell is approved by [DISA for use in IL2 environments in both Commercial and GovCloud regions](https://aws.amazon.com/compliance/services-in-scope/DoD_CC_SRG/). Please consult your organizations compliance personnel to ensure that CloudShell is approved for use in your organization's AWS Deployment.
+CloudShell is approved by [DISA for use in IL2-IL5 environments, including Commercial and GovCloud regions](https://aws.amazon.com/compliance/services-in-scope/DoD_CC_SRG/). Please consult your organizations compliance personnel to ensure that CloudShell is approved for use in your organization's AWS Deployment.
 
 1. Download the source code like shca-main.zip, from the main branch of this repo.
 
-2. Navigate to the CloudShell service in the AWS Account you will be using to act as your deployment environment.  Ensure you have enough space in your cloudshell prior to performing the deployment. If you run out of space it will fail.
+2. Navigate to the CloudShell service in the AWS Account you will be using to act as your deployment environment.  Ensure you have enough space in your CloudShell prior to performing the deployment. If you run out of space it will fail.
 
 2. Upload the source code into CloudShell. Unzip the files and cd into the `shca-main` directory: 
 
@@ -205,7 +205,7 @@ Once SHCA is deployed:
 
 1. Navigate to the Step Functions/State Machines Service:
 
-2. Select "scca-internal-dev-shca-State-Machine"
+2. Select `YOUR-ENVIRONMENT-NAME-State-Machine`
 
 3. If you have just deployed SHCA for the first time, verify that the state machine has successfully ran by viewing the execution. If the state machine ran successfully **skip to step 6**. Otherwise, to run SHCA on-demand, select "Start execution": 
 
