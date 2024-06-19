@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# Check if wget is installed
+if ! command -v wget &> /dev/null
+then
+    echo "wget could not be found. Please install wget and try again."
+    exit 1
+fi
+
+# Check if jq is installed
+if ! command -v jq &> /dev/null
+then
+    echo "jq could not be found. Please install jq and try again."
+    exit 1
+fi
+
+# Rest of the script
 echo "Updating AWS aws-sdk-pandas Lambda Layer"
 echo "Getting latest aws-sdk-pandas releases from github"
 
