@@ -64,7 +64,7 @@ class ShcaStack(Stack):
 
         # pylint: disable=line-too-long
         # fmt: off
-        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.7.3-py3.11.zip"
+        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.8.0-py3.11.zip"
 
         # Set variables from cdk context
         self.stack_env = self.node.try_get_context("environment")

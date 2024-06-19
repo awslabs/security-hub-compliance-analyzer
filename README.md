@@ -80,9 +80,16 @@ pip3 --version
 virtualenv --version
 ```
 
-#### Docker
+#### wget (optional for update_aws_wrangler.sh)
+
 ```bash
-docker --version
+wget --version
+```
+
+#### jq (optional for update_aws_wrangler.sh)
+
+```bash
+jq --version
 ```
 
 #### Install the AWS CDK
