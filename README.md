@@ -3,6 +3,13 @@
 ## Description
 Security Hub Compliance Analyzer (SHCA) generates artifacts in support of Department of Defense Risk Management Framework (RMF) Information System accreditation.  Utilizing Amazon Web Services provided documentation, mapping NIST800-53-Rev-5 Controls to [AWS Security Hub Security Control IDs](https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-controls-reference.html), SHCA requests the current environment compliance from Security Hub and generates a zip file stored in Amazon S3 containing discrete artifacts in CSV, JSON, OCSF providing SecOps with artifacts to import into the RMF tool.
 
+## Requirements
+Security Hub with and the NIST Special Publication 800-53 Revision 5 Security Standard and running for at least 24 hours to produce results
+
+** For more information on enabling this standard visit [Enabling and disabling security standards
+](https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards-enable-disable.html))
+
+
 ## Security Hub Compliance Analyzer Diagram
 ![Security Hub Compliance Analyzer Services](images/shca_diagram.png)
 
