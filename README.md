@@ -173,6 +173,7 @@ Modify the following values in `cdk.json`
     - "schedule_frequency_days": `7` - This setting dictates how often would you like SHCA to generate compliance reporting. 
     - "send_failure_notification_email": `true` or `false` - If `true`, email will be sent to the address provided in `failure_notification_email`.
     - "failure_notification_email": `example@email.com` - This email address will receive notifications upon a failure to execute SHCA.
+    - "package_artifacts_lambda_storage_size": `2048` - This setting dictates the ephemeral storage size in MB for the Package Artifacts lambda. Increase this if your reports are larger than 2048 MB. Specify a value between 512 MB and 10,240 MB, in 1-MB increments.
 
 From here you have two options on how to install SHCA (CloudShell or CDK)
 

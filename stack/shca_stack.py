@@ -89,6 +89,10 @@ class ShcaStack(Stack):
             "openscap_amazonlinux_image_version_hash"
         )
 
+        self.package_artifacts_lambda_storage_size = self.node.try_get_context(
+            "package_artifacts_lambda_storage_size"
+        )
+
         # Function calls to create resources
         self.__create_kms_key()
         self.__create_vpc_flow_log_group()
@@ -749,7 +753,7 @@ class ShcaStack(Stack):
             handler="lambda_function.lambda_handler",
             timeout=Duration.minutes(1),
             memory_size=2048,
-            ephemeral_storage_size=Size.gibibytes(2),
+            ephemeral_storage_size=Size.mebibytes(int(self.package_artifacts_lambda_storage_size)),
             # The following line is required to NeoLifter rule BC_AWS_GENERAL_65
             # "Ensure that AWS Lambda function is configured inside a VPC"
             vpc=self.vpc,

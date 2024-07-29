@@ -47,6 +47,7 @@
     "vpc_cidr": "10.30.0.0/24",
     "schedule_frequency_days": 1,
     "send_failure_notification_email": false,
-    "failure_notification_email": "youremail@yourdomain.com"
+    "failure_notification_email": "youremail@yourdomain.com",
+    "package_artifacts_lambda_storage_size": "2048"
   }
 }
