@@ -15,9 +15,9 @@ Logs and metrics for monitoring the analysis jobs
 The stack is parameterized to allow configuration via CDK context for
 the target AWS account and region.
 """
+
 from typing import List
-#import aws_cdk as cdk
-#from aws_cdk import Aws as Aws
+import os
 import cdk_nag as cdknag
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_events as events
@@ -38,7 +38,6 @@ from aws_cdk import RemovalPolicy
 from aws_cdk import Stack
 from aws_cdk import Size
 from constructs import Construct
-import os
 
 
 class ShcaStack(Stack):
@@ -69,6 +68,13 @@ class ShcaStack(Stack):
         # Set variables from cdk context
         self.stack_env = self.node.try_get_context("environment")
         self.vpc_cidr = self.node.try_get_context("vpc_cidr")
+
+        self.cidr_mask = self.node.try_get_context("cidr_mask")
+
+        # Validate that the cidr_mask value is present
+        if self.cidr_mask is None:
+            raise ValueError("cidr_mask value not found in cdk.json")
+
         self.schedule_frequency_days = self.node.try_get_context(
             "schedule_frequency_days"
         )
@@ -179,7 +185,7 @@ class ShcaStack(Stack):
                 ec2.SubnetConfiguration(
                     subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
                     name="Private Isolated",
-                    cidr_mask=26,
+                    cidr_mask=self.cidr_mask,
                 ),
             ],
             flow_logs={
@@ -233,12 +239,12 @@ class ShcaStack(Stack):
             private_dns_enabled=True,
             security_groups=[self.vpc_endpoint_security_group],
         )
-        self.vpc.add_interface_endpoint(
-            self.stack_env + "-Ec2Endpoint",
-            service=ec2.InterfaceVpcEndpointAwsService.EC2,
-            private_dns_enabled=True,
-            security_groups=[self.vpc_endpoint_security_group],
-        )
+        # self.vpc.add_interface_endpoint(
+        #     self.stack_env + "-Ec2Endpoint",
+        #     service=ec2.InterfaceVpcEndpointAwsService.EC2,
+        #     private_dns_enabled=True,
+        #     security_groups=[self.vpc_endpoint_security_group],
+        # )
 
         self.vpc.add_interface_endpoint(
             self.stack_env + "-CloudWatchLogsEndpoint",
@@ -269,7 +275,6 @@ class ShcaStack(Stack):
             server_access_logs_prefix="server_access_logs",
             auto_delete_objects=False,
         )
-
 
         self.s3_resource_bucket.add_lifecycle_rule(
             enabled=True,
@@ -330,7 +335,7 @@ class ShcaStack(Stack):
             queue_name=self.stack_env + "-Dead-Letter-Queue",
             visibility_timeout=Duration.seconds(30),
             retention_period=Duration.days(7),
-            encryption=sqs.QueueEncryption.KMS_MANAGED
+            encryption=sqs.QueueEncryption.KMS_MANAGED,
         )
 
     def __create_managed_policies(self) -> List[iam.ManagedPolicy]:
@@ -380,16 +385,12 @@ class ShcaStack(Stack):
                         "s3:ListBucket",
                         "s3:DeleteObject",
                     ],
-                    resources=[
-                        s3_bucket_arn,
-                        f"{s3_bucket_arn}/*"
-                    ],
+                    resources=[s3_bucket_arn, f"{s3_bucket_arn}/*"],
                     effect=iam.Effect.ALLOW,
                     sid="S3AccessPolicy",
                 ),
             ],
         )
-
 
         self.kms_policy = iam.ManagedPolicy(
             self,
@@ -489,8 +490,8 @@ class ShcaStack(Stack):
         """
         Creates a Lambda function responsible for making API calls to Security Hub
         to retrieve the latest active compliance findings and disabled rules.
-        
-        Additionally, communications between Lambda and Amazon S3 are encrypted in 
+
+        Additionally, communications between Lambda and Amazon S3 are encrypted in
         transit for enhanced security.
         """
 
@@ -539,10 +540,9 @@ class ShcaStack(Stack):
             code=lambda_.Code.from_asset("assets/lambda/code/1-config-rules-scrape"),
             handler="lambda_function.lambda_handler",
             timeout=Duration.minutes(10),
-            memory_size=2048,
-            # The following line is required to NeoLifter rule BC_AWS_GENERAL_65
-            # "Ensure that AWS Lambda function is configured inside a VPC"
-            vpc=self.vpc, 
+            memory_size=4096,
+            ephemeral_storage_size=Size.mebibytes(4096),
+            vpc=self.vpc,
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
             ),
@@ -565,7 +565,7 @@ class ShcaStack(Stack):
         that will parse findings scraped from AWS Security Hub and export them
         by resource ID and NIST control ID to CSV format.
 
-        Additionally, communications between Lambda and Amazon S3 are encrypted in 
+        Additionally, communications between Lambda and Amazon S3 are encrypted in
         transit for enhanced security.
         """
         self.parse_nist_controls_function_role = iam.Role(
@@ -607,10 +607,9 @@ class ShcaStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_11,
             code=lambda_.Code.from_asset("assets/lambda/code/2-parse-nist-controls"),
             handler="lambda_function.lambda_handler",
-            timeout=Duration.minutes(5),
+            timeout=Duration.minutes(10),
             memory_size=4096,
-            # The following line is required to NeoLifter rule BC_AWS_GENERAL_65
-            # "Ensure that AWS Lambda function is configured inside a VPC"
+            ephemeral_storage_size=Size.mebibytes(4096),
             vpc=self.vpc,
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
@@ -635,7 +634,7 @@ class ShcaStack(Stack):
         that will aggregate findings parsed by the previous function
         and generate a summary report.
 
-        Additionally, communications between Lambda and Amazon S3 are encrypted in 
+        Additionally, communications between Lambda and Amazon S3 are encrypted in
         transit for enhanced security.
         """
         self.create_summary_function_role = iam.Role(
@@ -677,10 +676,9 @@ class ShcaStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_11,
             code=lambda_.Code.from_asset("assets/lambda/code/3-create-summary"),
             handler="lambda_function.lambda_handler",
-            timeout=Duration.minutes(1),
-            memory_size=10240,
-            # The following line is required to NeoLifter rule BC_AWS_GENERAL_65
-            # "Ensure that AWS Lambda function is configured inside a VPC"
+            timeout=Duration.minutes(10),
+            memory_size=4096,
+            ephemeral_storage_size=Size.mebibytes(4096),
             vpc=self.vpc,
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
@@ -705,7 +703,7 @@ class ShcaStack(Stack):
         that will package the outputs from the previous functions into a
         single zip file.
 
-        Additionally, communications between Lambda and Amazon S3 are encrypted in 
+        Additionally, communications between Lambda and Amazon S3 are encrypted in
         transit for enhanced security.
         """
 
@@ -747,11 +745,9 @@ class ShcaStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_11,
             code=lambda_.Code.from_asset("assets/lambda/code/4-package-artifacts"),
             handler="lambda_function.lambda_handler",
-            timeout=Duration.minutes(1),
-            memory_size=2048,
-            ephemeral_storage_size=Size.gibibytes(2),
-            # The following line is required to NeoLifter rule BC_AWS_GENERAL_65
-            # "Ensure that AWS Lambda function is configured inside a VPC"
+            timeout=Duration.minutes(10),
+            memory_size=4096,
+            ephemeral_storage_size=Size.mebibytes(4096),
             vpc=self.vpc,
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
@@ -775,8 +771,10 @@ class ShcaStack(Stack):
         The Lambda function is configured with the necessary permissions, VPC settings,
         and other parameters to securely process the data and store the results.
 
-        Note: By default, AWS Lambda encrypts all environment variables at rest using a service-managed key.
-        Additionally, communications between Lambda and Amazon S3 are encrypted in transit for enhanced security.
+        Note: 
+        AWS Lambda encrypts all environment variables at rest using a service-managed key.
+        Additionally, communications between Lambda and Amazon S3 are 
+        encrypted in transit for enhanced security.
         """
 
         self.create_ocsf_function_role = iam.Role(
@@ -817,10 +815,9 @@ class ShcaStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_11,
             code=lambda_.Code.from_asset("assets/lambda/code/5-create-ocsf"),
             handler="lambda_function.lambda_handler",
-            timeout=Duration.minutes(1),
-            memory_size=1024,
-            # The following line is required to NeoLifter rule BC_AWS_GENERAL_65
-            # "Ensure that AWS Lambda function is configured inside a VPC"
+            timeout=Duration.minutes(10),
+            memory_size=4096,
+            ephemeral_storage_size=Size.mebibytes(4096),
             vpc=self.vpc,
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
@@ -839,10 +836,10 @@ class ShcaStack(Stack):
 
     def __create_6_create_oscal_function(self):
         """
-        Creates an AWS Lambda function to generate an OCSF (Open Cybersecurity Schema 
-        Framework) version of the results. Note: By default, AWS Lambda encrypts all 
-        environment variables at rest using a service-managed key. 
-        Additionally, communications between Lambda and Amazon S3 are encrypted in 
+        Creates an AWS Lambda function to generate an OCSF (Open Cybersecurity Schema
+        Framework) version of the results. Note: By default, AWS Lambda encrypts all
+        environment variables at rest using a service-managed key.
+        Additionally, communications between Lambda and Amazon S3 are encrypted in
         transit for enhanced security.
         """
         self.create_oscal_function_role = iam.Role(
@@ -883,10 +880,9 @@ class ShcaStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_11,
             code=lambda_.Code.from_asset("assets/lambda/code/6-create-oscal"),
             handler="lambda_function.lambda_handler",
-            timeout=Duration.minutes(1),
-            memory_size=1024,
-            # The following line is required to NeoLifter rule BC_AWS_GENERAL_65
-            # "Ensure that AWS Lambda function is configured inside a VPC"
+            timeout=Duration.minutes(10),
+            memory_size=4096,
+            ephemeral_storage_size=Size.mebibytes(4096),
             vpc=self.vpc,
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
@@ -1124,7 +1120,7 @@ class ShcaStack(Stack):
             ),
         )
 
-#------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def __cdk_output_variables(self):
         """Defines CDK output variables for stack resources."""
         CfnOutput(

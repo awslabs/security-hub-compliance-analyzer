@@ -5,3 +5,4 @@ cdk.out
 *.cdk.out
 assets/lambda/layers/awswrangler/*.zip
 cdk.context.json
+__pycache__

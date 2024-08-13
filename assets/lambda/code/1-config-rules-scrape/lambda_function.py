@@ -99,7 +99,6 @@ def list_disabled_rules():
 
 #def extract_securityhub_findings(securityhub_findings_json_key):
 def extract_securityhub_findings():
-
     """
     Extract findings from Security Hub and write to JSON.
 
@@ -118,13 +117,25 @@ def extract_securityhub_findings():
     }
 
     findings = []
+    next_token = ""
 
     logger.info("Get Findings from AWS Security Hub.")
-    paginator = security_hub_client.get_paginator("get_findings")
-    logger.info("Findings: %s", paginator)
-    logger.info("Paginating through AWS Security Hub Findings...")
-    for page in paginator.paginate(Filters=filters):
-        findings.extend(page["Findings"])
+    while next_token is not None:
+        try:
+            response = security_hub_client.get_findings(
+                Filters=filters,
+                MaxResults=100,
+                NextToken=next_token
+            )
+
+            findings.extend(response["Findings"])
+            logger.info("Retrieved %s findings so far...", len(findings))
+
+            next_token = response.get("NextToken", None)
+        except ClientError as e:
+            logger.error("Error getting findings: %s", str(e))
+            raise e
+
     logger.info("Pagination complete.")
     logger.info("Total number of findings: %s", len(findings))
 
