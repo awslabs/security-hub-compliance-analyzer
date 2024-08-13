@@ -818,7 +818,6 @@ class ShcaStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_11,
             code=lambda_.Code.from_asset("assets/lambda/code/5-create-ocsf"),
             handler="lambda_function.lambda_handler",
-            timeout=Duration.minutes(1),
             timeout=Duration.minutes(10),
             memory_size=4096,
             ephemeral_storage_size=Size.mebibytes(4096),
