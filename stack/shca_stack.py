@@ -370,6 +370,7 @@ class ShcaStack(Stack):
                     actions=[
                         "securityhub:GetFindings",
                         "securityhub:BatchImportFindings",
+                        "securityhub:GetEnabledStandards",
                     ],
                     resources=[
                         f"arn:{partition}:securityhub:{region}:{account_id}:hub/default",
