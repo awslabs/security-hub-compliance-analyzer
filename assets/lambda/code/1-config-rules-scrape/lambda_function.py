@@ -60,9 +60,10 @@ def lambda_handler(event, context):
 # Get list of disabled rules from Security Hub
 def list_disabled_rules():
     """
-    List disabled rules from Security Hub.
+    List disabled rules from Security Hub, filtering for NIST 800-53 controls.
 
-    Queries Security Hub for rules that are currently disabled and returns them as a list.
+    Queries Security Hub for rules that are currently disabled and returns them as a list,
+    but only includes those that contain "NIST" or "nist" in the StandardsControlArn.
     """
     disabled_rules = []
 
@@ -84,20 +85,20 @@ def list_disabled_rules():
             for page in paginator.paginate(StandardsSubscriptionArn=standards_subscription_arn):
                 if 'Controls' in page:
                     for control in page['Controls']:
-                        if control['ControlStatus'] == 'DISABLED':
+                        if control['ControlStatus'] == 'DISABLED' and ('NIST' in control['StandardsControlArn'] or 'nist' in control['StandardsControlArn']):
                             disabled_control_id = control['StandardsControlArn'].split('/')[-1]
                             disabled_rules.append({
                                 'StandardsControlArn': control['StandardsControlArn'],
                                 'disabled_control_id': disabled_control_id,
                             })
-                            logger.info("Disabled rule found: %s", disabled_control_id)
+                            logger.info("Disabled NIST 800-53 rule found: %s", disabled_control_id)
 
     except ClientError as e:
         logger.error("An error occurred while listing disabled controls: %s", str(e))
 
     return disabled_rules
 
-#def extract_securityhub_findings(securityhub_findings_json_key):
+
 def extract_securityhub_findings():
     """
     Extract findings from Security Hub and write to JSON.
