@@ -19,13 +19,13 @@ import logging
 import os
 from typing import List
 import datetime
+import fnmatch
 import zipfile
 import tempfile
 import shutil
 from pathlib import Path
 import pandas as pd
 import boto3
-import tempfile
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,7 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
             exclude_prefixes = [
                 "*findings_by_security_control_id",
                 "*artifacts*.zip",
+                "*.zip",
                 "*original_findings_in_ocsf",
                 "*original_findings_in_oscal",
             ]
@@ -269,9 +270,9 @@ def download_s3_files(
         for obj in result.get("Contents", []):
             key = obj["Key"]
 
-            if exclude_prefixes:
-                if any(key.startswith(p) for p in exclude_prefixes):
-                    continue
+            if any(fnmatch.fnmatch(key, p) for p in exclude_prefixes):
+                logger.info("Skipping excluded file: %s", key)
+                continue
 
             parts = key.split("/")
             filename = parts[-1]
