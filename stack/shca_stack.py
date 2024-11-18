@@ -79,6 +79,10 @@ class ShcaStack(Stack):
             "schedule_frequency_days"
         )
 
+        self.artifact_replicas_to_retain = self.node.try_get_context(
+            "artifact_replicas_to_retain"
+        )
+
         self.send_failure_notification_email = self.node.try_get_context(
             "send_failure_notification_email"
         )
@@ -278,10 +282,10 @@ class ShcaStack(Stack):
 
         self.s3_resource_bucket.add_lifecycle_rule(
             enabled=True,
-            expiration=Duration.days(1825),
-            id="expire-1825-days",
-            noncurrent_versions_to_retain=3,
+            id="retain-artifact-replicas",
+            noncurrent_version_expiration=Duration.days(self.artifact_replicas_to_retain * 7),  # Assuming weekly backups
         )
+
 
         cdknag.NagSuppressions.add_resource_suppressions(
             construct=self.s3_resource_bucket,
