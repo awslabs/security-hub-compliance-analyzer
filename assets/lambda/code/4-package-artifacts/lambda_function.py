@@ -113,8 +113,8 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
                     )
             # Zipping artifacts
             logger.info("Zipping files and directories to create artifacts zip")
-            artifacts_zip_path = "artifacts.zip"
-            with zipfile.ZipFile(artifacts_zip_path, "w") as zipf:
+            zip_file_name = os.path.join(tmp_dir, "artifacts.zip")
+            with zipfile.ZipFile(zip_file_name, "w") as zipf:
                 for root, dirs, files in os.walk(tmp_dir):
                     for file in files:
                         file_path = os.path.join(root, file)
@@ -126,24 +126,23 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
             logger.info("Uploading zip file to s3")
 
             # Extract the file name from the artifacts_zip_path
-            zip_file_name = "artifacts.zip"
-
+            zip_file_name = os.path.join(tmp_dir, "artifacts.zip")
             # Define the S3 object name with the correct path and
             # the dynamically generated file name
-            s3_object_name = f"shca/{zip_file_name}"
+            s3_object_name = "shca/artifacts.zip"
 
-            upload_to_s3(artifacts_zip_path, bucket_name, s3_object_name)
+            upload_to_s3(zip_file_name, bucket_name, s3_object_name)
 
             log_disk_usage("before final clear")
             print(
                 (
                     "Artifacts created and zipped successfully as ",
-                    f"{zip_file_name}. Status code: 200",
+                    f"{os.path.basename(zip_file_name)}. Status code: 200",
                 )
             )
             return {
                 "message": "Artifacts created and zipped successfully"
-                f" as {zip_file_name}."
+                f" as {os.path.basename(zip_file_name)}."
             }
 
     finally:
