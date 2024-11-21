@@ -1018,13 +1018,22 @@ class ShcaStack(Stack):
             lambda_function=self.create_oscal_function,
         )
 
+        # Add a Fail state
+        fail_state = stepfunctions.Fail(
+            self,
+            self.stack_env + "-failure-state",
+            cause="Task Failed",
+            error="TaskFailed"
+        )
+
+        # Modify the fail task to chain to the Fail state
         fail_task = stepfunctions_tasks.SnsPublish(
             self,
             self.stack_env + "-fail-task",
             topic=self.sns_topic,
             subject="Job Failed",
             message=stepfunctions.TaskInput.from_json_path_at("$.taskresult"),
-        )
+        ).next(fail_state)  # Chain the Fail state after SNS notification
 
         step_1_job.add_catch(fail_task, result_path="$.taskresult")
         step_2_job.add_catch(
