@@ -45,6 +45,7 @@ def lambda_handler(event, context):
                  It is required by AWS Lambda, even if it's not used in this function.
     """
     #bucket_name = os.environ["BUCKET_NAME"]
+    securityhub_findings_by_account_key = "shca/findings_by_account/"
     securityhub_findings_csv_key = "shca/condensed_findings/nist80053_findings_condensed.csv"
     securityhub_summary_csv_key = "shca/control_summary_of_findings/nist80053_findings_summary.csv"
     analysis_summary_html_key = "shca/analysis_summary_in_html/nist80053_analysis_summary.html"
@@ -63,6 +64,12 @@ def lambda_handler(event, context):
     # Creates securityhub_nist80053_findings_summary.csv for post analysis
     create_control_summary_of_findings_data(
         clean_condensed_data, securityhub_summary_csv_key
+    )
+
+    # Generate account-specific reports
+    generate_findings_by_account(
+        clean_condensed_data,
+        securityhub_findings_by_account_key
     )
 
     # Generate the HTML table
@@ -91,6 +98,69 @@ def lambda_handler(event, context):
 
     logger.info("Lambda handler completed")
     return {"statusCode": 200, "body": "Files saved to :" + securityhub_summary_csv_key}
+
+def generate_findings_by_account(
+    clean_condensed_data,
+    securityhub_findings_by_account_key):
+    """
+    Generate and upload account-specific findings reports to S3.
+    """
+    logger.info("Generating findings by AWS account ID.")
+
+    # Group the data by aws_account_id
+    findings_by_account = clean_condensed_data.groupby("aws_account_id")
+
+    # Iterate over each account and create a separate report
+    for account_id, account_data in findings_by_account:
+        logger.info("Generating findings for account: %s", account_id)
+
+        # Create account summary
+        account_summary = (
+            account_data.groupby("compliance_control_id")
+            .agg({
+                "compliance_status": [
+                    determine_compliance_status,
+                    calculate_percentage,
+                ],
+                "rule_id": lambda x: sorted(list(set(x))),
+                "lastobservedat": "first",
+            })
+            .reset_index()
+        )
+
+        account_summary.columns = [
+            "compliance_control_id",
+            "compliance_status",
+            "percentage",
+            "rule_id",
+            "lastobservedat",
+        ]
+
+        # Generate account-specific HTML report
+        account_metrics = generate_metrics_condensed_data(
+            account_data, 
+            account_summary["percentage"].str.rstrip("%").astype(float).mean()
+        )
+
+        # Save account summary to S3
+        account_summary_key = f"{securityhub_findings_by_account_key}{account_id}/account_summary.csv"
+        put_dataframe_to_s3(account_summary, account_summary_key)
+
+        # Generate and save account-specific HTML report
+        account_html = generate_analysis_summary_report_html_report(
+            account_metrics,
+            account_data,
+            account_summary.to_html(index=False),
+            pd.DataFrame(),  # Empty DataFrame for disabled rules
+            pd.DataFrame(),  # Empty DataFrame for suppressed findings
+        )
+        
+        account_html_key = f"{securityhub_findings_by_account_key}{account_id}/account_report.html"
+        write_and_upload_report(account_html, account_html_key)
+
+        logger.info(
+            "Account summary and report for %s saved to S3", account_id
+        )
 
 
 def get_dataframe_from_s3(key: str) -> pd.DataFrame:
@@ -1051,6 +1121,7 @@ def generate_analysis_summary_report_html_report(
 
     # Add total_findings to metrics_condensed_data
     metrics_condensed_data["total_findings"] = total_findings
+    
     # Initialize the variables
     suppressed_findings_count = 0
     suppressed_findings_list = ""
