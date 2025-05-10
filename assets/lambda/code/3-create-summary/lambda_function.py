@@ -30,26 +30,35 @@ s3_client = boto3.client("s3", region_name=region)
 bucket_name = os.environ["BUCKET_NAME"]
 
 
-def lambda_handler(event, context):
+def lambda_handler(event, context):  # pylint: disable=unused-argument
     """
     Lambda function that processes SecurityHub findings data.
 
-    Retrieves condensed findings data, summary data, and other related 
-    files from S3. Performs initial data cleaning on the condensed 
+    Retrieves condensed findings data, summary data, and other related
+    files from S3. Performs initial data cleaning on the condensed
     findings.
 
     Args:
-        event: The event data that triggered the Lambda function. 
+        event: The event data that triggered the Lambda function.
                It is required by AWS Lambda, even if it's not used in this function.
-        context: The runtime information provided by AWS Lambda. 
+        context: The runtime information provided by AWS Lambda.
                  It is required by AWS Lambda, even if it's not used in this function.
     """
-    #bucket_name = os.environ["BUCKET_NAME"]
-    securityhub_findings_csv_key = "shca/condensed_findings/nist80053_findings_condensed.csv"
-    securityhub_summary_csv_key = "shca/control_summary_of_findings/nist80053_findings_summary.csv"
-    analysis_summary_html_key = "shca/analysis_summary_in_html/nist80053_analysis_summary.html"
+    # bucket_name = os.environ["BUCKET_NAME"]
+    securityhub_findings_by_account_key = "shca/findings_by_account/"
+    securityhub_findings_csv_key = (
+        "shca/condensed_findings/nist80053_findings_condensed.csv"
+    )
+    securityhub_summary_csv_key = (
+        "shca/control_summary_of_findings/nist80053_findings_summary.csv"
+    )
+    analysis_summary_html_key = (
+        "shca/analysis_summary_in_html/nist80053_analysis_summary.html"
+    )
     securityhub_disabled_rules_key = "shca/disabled_rules/disabled_rules.csv"
-    securityhub_suppressed_findings_key = "shca/suppressed_findings/suppressed_findings.csv"
+    securityhub_suppressed_findings_key = (
+        "shca/suppressed_findings/suppressed_findings.csv"
+    )
 
     condensed_data = get_dataframe_from_s3(securityhub_findings_csv_key)
     clean_condensed_data = process_whitespace(condensed_data)
@@ -58,18 +67,26 @@ def lambda_handler(event, context):
     disabled_rules_data = get_dataframe_from_s3(securityhub_disabled_rules_key)
 
     # Retrieve and process supressed findings data
-    suppressed_findings_data = get_dataframe_from_s3(securityhub_suppressed_findings_key)
+    suppressed_findings_data = get_dataframe_from_s3(
+        securityhub_suppressed_findings_key
+    )
 
     # Creates securityhub_nist80053_findings_summary.csv for post analysis
     create_control_summary_of_findings_data(
         clean_condensed_data, securityhub_summary_csv_key
     )
 
+    # Generate account-specific reports
+    generate_findings_by_account(
+        clean_condensed_data, securityhub_findings_by_account_key
+    )
+
     # Generate the HTML table
-    html_table, percentage_compliant_control_ids = (
-        create_control_summary_of_findings_data(
-            clean_condensed_data, securityhub_summary_csv_key
-        )
+    (
+        html_table,
+        percentage_compliant_control_ids,
+    ) = create_control_summary_of_findings_data(
+        clean_condensed_data, securityhub_summary_csv_key
     )
 
     metrics_condensed_data = generate_metrics_condensed_data(
@@ -85,12 +102,78 @@ def lambda_handler(event, context):
         suppressed_findings_data,
     )
 
-    write_and_upload_report(
-        analysis_summary_html, analysis_summary_html_key
-    )
+    write_and_upload_report(analysis_summary_html, analysis_summary_html_key)
 
     logger.info("Lambda handler completed")
     return {"statusCode": 200, "body": "Files saved to :" + securityhub_summary_csv_key}
+
+
+def generate_findings_by_account(
+    clean_condensed_data, securityhub_findings_by_account_key
+):
+    """
+    Generate and upload account-specific findings reports to S3.
+    """
+    logger.info("Generating findings by AWS account ID.")
+
+    # Group the data by aws_account_id
+    findings_by_account = clean_condensed_data.groupby("aws_account_id")
+
+    # Iterate over each account and create a separate report
+    for account_id, account_data in findings_by_account:
+        logger.info("Generating findings for account: %s", account_id)
+
+        # Create account summary
+        account_summary = (
+            account_data.groupby("compliance_control_id")
+            .agg(
+                {
+                    "compliance_status": [
+                        determine_compliance_status,
+                        calculate_percentage,
+                    ],
+                    "rule_id": lambda x: sorted(list(set(x))),
+                    "lastobservedat": "first",
+                }
+            )
+            .reset_index()
+        )
+
+        account_summary.columns = [
+            "compliance_control_id",
+            "compliance_status",
+            "percentage",
+            "rule_id",
+            "lastobservedat",
+        ]
+
+        # Generate account-specific HTML report
+        account_metrics = generate_metrics_condensed_data(
+            account_data,
+            account_summary["percentage"].str.rstrip("%").astype(float).mean(),
+        )
+
+        # Save account summary to S3
+        account_summary_key = (
+            f"{securityhub_findings_by_account_key}{account_id}/account_summary.csv"
+        )
+        put_dataframe_to_s3(account_summary, account_summary_key)
+
+        # Generate and save account-specific HTML report
+        account_html = generate_analysis_summary_report_html_report(
+            account_metrics,
+            account_data,
+            account_summary.to_html(index=False),
+            pd.DataFrame(),  # Empty DataFrame for disabled rules
+            pd.DataFrame(),  # Empty DataFrame for suppressed findings
+        )
+
+        account_html_key = (
+            f"{securityhub_findings_by_account_key}{account_id}/account_report.html"
+        )
+        write_and_upload_report(account_html, account_html_key)
+
+        logger.info("Account summary and report for %s saved to S3", account_id)
 
 
 def get_dataframe_from_s3(key: str) -> pd.DataFrame:
@@ -106,7 +189,7 @@ def get_dataframe_from_s3(key: str) -> pd.DataFrame:
     """
     logger.info("Retrieving data from S3.")
     # Create an S3 client
-    #s3_client = boto3.client("s3")
+    # s3_client = boto3.client("s3")
     # Get the object from S3
     response = s3_client.get_object(Bucket=bucket_name, Key=key)
     # Read the CSV content
@@ -115,6 +198,7 @@ def get_dataframe_from_s3(key: str) -> pd.DataFrame:
     df = pd.read_csv(StringIO(csv_string))
     logger.info("Data retrieved from S3.")
     return df
+
 
 def put_dataframe_to_s3(df: pd.DataFrame, key: str) -> None:
     """
@@ -179,10 +263,14 @@ def generate_narrative(row: pd.Series) -> str:
 
     try:
         logger.info("Trying to parse datetime with microseconds: %s", datetime_string)
-        observed_at = datetime.strptime(datetime_string, datetime_format_with_microseconds)
+        observed_at = datetime.strptime(
+            datetime_string, datetime_format_with_microseconds
+        )
     except ValueError as e:
         logger.info("Microseconds not present, trying without them: %s", e)
-        observed_at = datetime.strptime(datetime_string, datetime_format_without_microseconds)
+        observed_at = datetime.strptime(
+            datetime_string, datetime_format_without_microseconds
+        )
 
     formatted_observed_at = observed_at.strftime("%B %d, %Y at %I:%M %p %Z")
     narrative = (
@@ -207,9 +295,9 @@ def create_control_summary_of_findings_data(
     """
     Create a summary of findings data for each control.
 
-    Takes the cleaned condensed findings data, bucket name, and 
-    S3 key for the summary CSV file. Groups the data by control, 
-    calculates summary stats for each control, and saves the 
+    Takes the cleaned condensed findings data, bucket name, and
+    S3 key for the summary CSV file. Groups the data by control,
+    calculates summary stats for each control, and saves the
     results to the specified S3 location.
     """
     logger.info("Creating control summary of findings data.")
@@ -252,9 +340,7 @@ def create_control_summary_of_findings_data(
     )
 
     logger.info("Writing the CSV to S3.")
-    put_dataframe_to_s3(
-        findings_dataframe_grouped, securityhub_summary_csv_key
-    )
+    put_dataframe_to_s3(findings_dataframe_grouped, securityhub_summary_csv_key)
     logger.info("%s written to S3.", securityhub_summary_csv_key)
 
     # Calculate the average percentage of compliance
@@ -291,7 +377,9 @@ def create_control_summary_of_findings_data(
         except ValueError as e:
             # Log the error and the problematic date string
             logger.error(
-                "Error converting date string: %s - Error: %s", row['Last Time Assessed'], e
+                "Error converting date string: %s - Error: %s",
+                row["Last Time Assessed"],
+                e,
             )
 
     # Convert the copied dataframe to HTML
@@ -299,9 +387,7 @@ def create_control_summary_of_findings_data(
 
     # Now use the original dataframe (findings_dataframe_grouped) to create the CSV file
     # This dataframe will have the original column names and date formats
-    put_dataframe_to_s3(
-        findings_dataframe_grouped, securityhub_summary_csv_key
-    )
+    put_dataframe_to_s3(findings_dataframe_grouped, securityhub_summary_csv_key)
 
     # Return only the HTML table and the average percentage of compliance
     return html_table, percentage_compliant_control_ids
@@ -388,15 +474,14 @@ def determine_compliance_status(findings: pd.Series) -> str:
     # logger.info("Determining compliance status...")
     if "PASSED" in findings.values and "FAILED" in findings.values:
         return "partially compliant"
-    elif "PASSED" in findings.values:
+    if "PASSED" in findings.values:
         return "compliant"
-    elif "FAILED" in findings.values:
+    if "FAILED" in findings.values:
         return "non-compliant"
-    else:
-        return "unknown"
+    return "unknown"
 
 
-# This function caculates the control percentages for the securityhub_nist80053_findings_summary.csv
+# This function calculates the control percentages for the securityhub_nist80053_findings_summary.csv
 def calculate_percentage(findings: pd.Series) -> str:
     """
     Calculate percentage of findings that passed
@@ -439,18 +524,18 @@ def determine_rule_compliance_status(findings):
     # Check if all findings for the rule are 'PASSED'
     if all(findings == "PASSED"):
         return "Passed"
-    else:
-        return "Failed"
+    return "Failed"
+
 
 # This function adds columns to the rules dataframe
 def add_columns_to_rules(rules):
     """Add metrics columns to the rules DataFrame.
 
-    This function takes the rules DataFrame and adds new columns 
+    This function takes the rules DataFrame and adds new columns
     calculating metrics from the existing data.
 
-    The 'total_checks' column sums all checks per row. 'checks_passed' 
-    and 'checks_failed' columns extract those values. 
+    The 'total_checks' column sums all checks per row. 'checks_passed'
+    and 'checks_failed' columns extract those values.
 
     Percentage columns are then calculated from the counts and total.
 
@@ -478,12 +563,12 @@ def generate_metrics_condensed_data(
 ):
     """Generate condensed metrics data from analysis results.
 
-    This function takes the clean condensed data DataFrame and the 
+    This function takes the clean condensed data DataFrame and the
     percentage of compliant control IDs. It logs that it is generating
     the metrics condensed data.
 
-    For debugging, the header and first row of the clean data is 
-    printed. This function would then be expected to process the 
+    For debugging, the header and first row of the clean data is
+    printed. This function would then be expected to process the
     clean data to extract metrics and return or save the metrics
     condensed data.
 
@@ -828,16 +913,16 @@ def generate_metrics_condensed_data(
 def create_html_sections(dataframe):
     """Create HTML sections from compliance data.
 
-    This function takes in a dataframe containing compliance data and 
-    generates HTML sections to display the results. It sorts the data 
-    by rule ID, then iterates through each row to create a <details> 
-    element for that section. 
+    This function takes in a dataframe containing compliance data and
+    generates HTML sections to display the results. It sorts the data
+    by rule ID, then iterates through each row to create a <details>
+    element for that section.
 
-    The section title is pulled from the 'rule_id' column. A 'fail' or 
-    'pass' class is set based on the 'compliance_status'. HTML rows 
-    are generated from each row data. 
+    The section title is pulled from the 'rule_id' column. A 'fail' or
+    'pass' class is set based on the 'compliance_status'. HTML rows
+    are generated from each row data.
 
-    The <details> tag is conditionally opened if the status is 
+    The <details> tag is conditionally opened if the status is
     'FAILED'. Finally, all sections are appended to an HTML list and
     returned.
     """
@@ -872,16 +957,16 @@ def create_html_sections(dataframe):
 def create_rows_html(row):
     """Generate HTML for a table row from compliance data.
 
-    This function takes a row of compliance data and generates the 
-    HTML needed to display it in a table. It determines the row 
-    class based on the compliance status. 
+    This function takes a row of compliance data and generates the
+    HTML needed to display it in a table. It determines the row
+    class based on the compliance status.
 
-    HTML strings are created for each data field, with field names 
-    bolded. These are combined with line breaks for a stacked 
-    appearance. 
+    HTML strings are created for each data field, with field names
+    bolded. These are combined with line breaks for a stacked
+    appearance.
 
-    The formatted data and result are returned within <tr> tags to 
-    define a single row. This HTML can then be included in the 
+    The formatted data and result are returned within <tr> tags to
+    define a single row. This HTML can then be included in the
     overall compliance report table.
     """
     # Define the class for the row based on compliance status
@@ -927,14 +1012,14 @@ def generate_analysis_summary_report_html_report(
 
     This function takes in condensed data from the analysis metrics,
     clean data, the generated HTML table, and data about disabled
-    rules and suppressed findings. 
+    rules and suppressed findings.
 
     It logs a message indicating it is generating the report in HTML
-    format. This function would then be expected to generate the 
+    format. This function would then be expected to generate the
     actual HTML report file using the passed in data.
 
-    The report provides a summary of the key metrics and findings 
-    from the security analysis in an HTML format for easy viewing 
+    The report provides a summary of the key metrics and findings
+    from the security analysis in an HTML format for easy viewing
     and sharing.
     """
     logger.info("Generating analysis summary report in html format")
@@ -1017,13 +1102,13 @@ def generate_analysis_summary_report_html_report(
     # <-----------Control Calculations----------->
     overall_nist_compliance_string = overall_nist_compliance
     overall_nist_compliance_string = f"{overall_nist_compliance_string:.2f}%"
-    #overall_nist_compliance_string = "{:.2f}%".format(overall_nist_compliance_string)
+    # overall_nist_compliance_string = "{:.2f}%".format(overall_nist_compliance_string)
 
     overall_nist_compliance_failed = 100 - overall_nist_compliance
     overall_nist_compliance_failed_string = f"{overall_nist_compliance_failed:.2f}%"
-    #overall_nist_compliance_failed_string = "{:.2f}%".format(
+    # overall_nist_compliance_failed_string = "{:.2f}%".format(
     #    overall_nist_compliance_failed
-    #)
+    # )
 
     # Determine the compliance descriptor based on the overall_nist_compliance value
     if overall_nist_compliance >= 95:
@@ -1051,6 +1136,7 @@ def generate_analysis_summary_report_html_report(
 
     # Add total_findings to metrics_condensed_data
     metrics_condensed_data["total_findings"] = total_findings
+
     # Initialize the variables
     suppressed_findings_count = 0
     suppressed_findings_list = ""
@@ -1086,8 +1172,8 @@ def generate_analysis_summary_report_html_report(
             report += f"\n  - {severity}\n"
             for rule_id in rules_failed:
                 report += f"    - Rule: {rule_id}\n"
-    report # The 'report' variable accumulates the report content.
-    #It is used later for output or further processing.
+    # The 'report' variable accumulates the report content.
+    # It is used later for output or further processing.
 
     # 2. Address Top 5 Resources with the Most Failed Compliance Checks
     report += "\n2. Address Top 5 Resources with the Most Failed Compliance Checks\n"
