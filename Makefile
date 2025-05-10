@@ -46,6 +46,8 @@ enable-prerequisites:
 	echo "Creating S3 bucket for Config..." && \
 	CONFIG_BUCKET_NAME="config-bucket-$$AWS_ACCOUNT_ID-$$AWS_REGION" && \
 	aws s3 mb s3://$$CONFIG_BUCKET_NAME --region $$AWS_REGION 2>/dev/null || true && \
+	echo "Adding bucket policy for AWS Config..." && \
+	aws s3api put-bucket-policy --bucket $$CONFIG_BUCKET_NAME --policy "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"AWSConfigBucketPermissionsCheck\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"config.amazonaws.com\"},\"Action\":\"s3:GetBucketAcl\",\"Resource\":\"arn:$$PARTITION:s3:::$$CONFIG_BUCKET_NAME\"},{\"Sid\":\"AWSConfigBucketDelivery\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"config.amazonaws.com\"},\"Action\":\"s3:PutObject\",\"Resource\":\"arn:$$PARTITION:s3:::$$CONFIG_BUCKET_NAME/AWSLogs/$$AWS_ACCOUNT_ID/*\",\"Condition\":{\"StringEquals\":{\"s3:x-amz-acl\":\"bucket-owner-full-control\"}}}]}" && \
 	echo "Enabling AWS Config..." && \
 	CONFIG_ROLE_ARN="arn:$$PARTITION:iam::$$AWS_ACCOUNT_ID:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig" && \
 	if [[ "$$AWS_REGION" == *-gov-* ]]; then \
@@ -57,7 +59,8 @@ enable-prerequisites:
 	aws configservice start-configuration-recorder --configuration-recorder-name default && \
 	echo "Enabling Security Hub..." && \
 	aws securityhub enable-security-hub || true && \
-	sleep 5 && \
+	echo "Waiting for Security Hub to initialize (15 seconds)..." && \
+	sleep 15 && \
 	echo "Enabling NIST 800-53 Rev. 5 standard..." && \
 	aws securityhub batch-enable-standards --standards-subscription-requests StandardsArn=arn:$$PARTITION:securityhub:$$AWS_REGION::standards/nist-800-53/v/5.0.0 || true && \
 	echo "✅ All prerequisites are now enabled"
