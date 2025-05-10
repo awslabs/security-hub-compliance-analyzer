@@ -49,6 +49,8 @@
     "schedule_frequency_days": 7,
     "artifact_replicas_to_retain": 7,
     "send_failure_notification_email": false,
-    "failure_notification_email": "youremail@yourdomain.com"
+    "failure_notification_email": "youremail@yourdomain.com",
+    "role_prefix": "",
+    "permission_boundary_policy_name": ""
   }
 }
