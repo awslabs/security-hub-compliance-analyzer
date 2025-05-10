@@ -33,6 +33,7 @@ logger.setLevel(logging.DEBUG)
 region = os.environ["AWS_REGION"]
 bucket_name = os.environ["BUCKET_NAME"]
 
+
 def lambda_handler(event, context):  # pylint: disable=unused-argument
     """
     This function will create a zip file containing all of the required
@@ -43,10 +44,7 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
     max_used_storage_mb = 0  # Initialize max storage used
     logger.info("Clearing the /tmp directory before starting the job")
     clean_tmp_directory()
-    max_used_storage_mb = max(
-        max_used_storage_mb,
-        log_disk_usage("at start")
-    )
+    max_used_storage_mb = max(max_used_storage_mb, log_disk_usage("at start"))
 
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -68,8 +66,7 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
                 exclude_prefixes=exclude_prefixes,
             )
             max_used_storage_mb = max(
-                max_used_storage_mb,
-                log_disk_usage("after downloads")
+                max_used_storage_mb, log_disk_usage("after downloads")
             )
 
             # Create control evidence artifacts
@@ -79,9 +76,7 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
             # directory structure
             zip_file_name = "artifacts.zip"
             artifacts_zip_path = compress_shca_folder(
-                tmp_dir,
-                exclude_prefixes,
-                zip_file_name
+                tmp_dir, exclude_prefixes, zip_file_name
             )
 
             # Uploading zip file to s3
@@ -97,8 +92,7 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
 
             return {
                 "message": (
-                    f"Artifacts created and zipped successfully as "
-                    f"{zip_file_name}."
+                    f"Artifacts created and zipped successfully as " f"{zip_file_name}."
                 ),
                 "max_used_storage_mb": max_used_storage_mb,
                 "max_memory_allocated_mb": context.memory_limit_in_mb,
@@ -107,17 +101,15 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
     finally:
         clean_tmp_directory()
         max_used_storage_mb = max(
-            max_used_storage_mb,
-            log_disk_usage("after final cleanup")
+            max_used_storage_mb, log_disk_usage("after final cleanup")
         )
 
     return {
-        "message": (
-            f"Artifacts created and zipped successfully as {zip_file_name}"
-        ),
+        "message": (f"Artifacts created and zipped successfully as {zip_file_name}"),
         "max_used_storage_mb": max_used_storage_mb,
         "max_memory_allocated_mb": context.memory_limit_in_mb,
     }
+
 
 def create_control_evidence_artifacts(tmp_dir):
     """
@@ -144,12 +136,8 @@ def create_control_evidence_artifacts(tmp_dir):
     The function does not return any value.
     """
     logger.info("Creating additional directories.")
-    compliant_csv_path = (
-        Path(tmp_dir) / "controls_ready_to_import_into_rmf_tool"
-    )
-    non_compliant_csv_path = (
-        Path(tmp_dir) / "controls_which_require_attention"
-    )
+    compliant_csv_path = Path(tmp_dir) / "controls_ready_to_import_into_rmf_tool"
+    non_compliant_csv_path = Path(tmp_dir) / "controls_which_require_attention"
     os.makedirs(compliant_csv_path, exist_ok=True)
     os.makedirs(non_compliant_csv_path, exist_ok=True)
 
@@ -170,20 +158,17 @@ def create_control_evidence_artifacts(tmp_dir):
         ]
         if status.lower() == "compliant":
             findings.to_csv(
-                os.path.join(
-                    compliant_csv_path,
-                    f"{control}_{status}_{timestamp}.csv"
-                ),
-                index=False
+                os.path.join(compliant_csv_path, f"{control}_{status}_{timestamp}.csv"),
+                index=False,
             )
         else:
             findings.to_csv(
                 os.path.join(
-                    non_compliant_csv_path,
-                    f"{control}_{status}_{timestamp}.csv"
+                    non_compliant_csv_path, f"{control}_{status}_{timestamp}.csv"
                 ),
-                index=False
+                index=False,
             )
+
 
 def compress_shca_folder(tmp_dir, exclude_prefixes, zip_file_name):
     """
@@ -208,32 +193,28 @@ def compress_shca_folder(tmp_dir, exclude_prefixes, zip_file_name):
     with zipfile.ZipFile(artifacts_zip_path, "w") as zipf:
         # First, add all files from the tmp_dir (which includes files
         # from shca/)
-        for root, dirs, files in os.walk(tmp_dir):
+        for root, _, files in os.walk(tmp_dir):
             for file in files:
                 file_path = os.path.join(root, file)
                 if valid_file(file_path) and not any(
-                    fnmatch.fnmatch(file_path, pattern)
-                    for pattern in exclude_prefixes
+                    fnmatch.fnmatch(file_path, pattern) for pattern in exclude_prefixes
                 ):
                     arcname = os.path.relpath(file_path, tmp_dir)
                     zipf.write(file_path, arcname=arcname)
 
         # Now download and add findings_by_service_and_nist_control
         # files to the zip
-        findings_tmp_dir = os.path.join(
-            tmp_dir,
-            "findings_by_service_and_nist_control"
-        )
+        findings_tmp_dir = os.path.join(tmp_dir, "findings_by_service_and_nist_control")
         os.makedirs(findings_tmp_dir, exist_ok=True)
         download_s3_files(
             bucket=bucket_name,
             local_dir=findings_tmp_dir,
             start_prefix="shca/findings_by_service_and_nist_control/",
-            exclude_prefixes=[]
+            exclude_prefixes=[],
         )
 
         # Add findings_by_service_and_nist_control files to the zip
-        for root, dirs, files in os.walk(findings_tmp_dir):
+        for root, _, files in os.walk(findings_tmp_dir):
             for file in files:
                 file_path = os.path.join(root, file)
                 if valid_file(file_path):
@@ -242,11 +223,9 @@ def compress_shca_folder(tmp_dir, exclude_prefixes, zip_file_name):
 
     return artifacts_zip_path
 
+
 def download_s3_files(
-    bucket: str,
-    local_dir: str,
-    start_prefix: str,
-    exclude_prefixes: List[str] = None
+    bucket: str, local_dir: str, start_prefix: str, exclude_prefixes: List[str] = None
 ) -> None:
     """
     Download files from an S3 bucket to a local directory.
@@ -267,11 +246,7 @@ def download_s3_files(
     s3_client = boto3.client("s3")
     paginator = s3_client.get_paginator("list_objects_v2")
 
-    for result in paginator.paginate(
-        Bucket=bucket,
-        Delimiter="",
-        Prefix=start_prefix
-    ):
+    for result in paginator.paginate(Bucket=bucket, Delimiter="", Prefix=start_prefix):
         for obj in result.get("Contents", []):
             key = obj["Key"]
             if exclude_prefixes:
@@ -280,8 +255,7 @@ def download_s3_files(
 
             # Construct the full local path
             local_file_path = os.path.join(
-                local_dir,
-                os.path.relpath(key, start_prefix)
+                local_dir, os.path.relpath(key, start_prefix)
             )
 
             # Create local directory if it doesn't exist
@@ -292,6 +266,7 @@ def download_s3_files(
                 logger.info("Downloaded %s to %s", key, local_file_path)
             except ClientError as e:
                 logger.error("Error downloading %s: %s", key, e)
+
 
 def upload_to_s3(file_name, bucket, object_name=None):
     """Upload a file to an S3 bucket
@@ -306,6 +281,7 @@ def upload_to_s3(file_name, bucket, object_name=None):
         object_name = os.path.basename(file_name)
     s3_client = boto3.client("s3", region_name=region)
     s3_client.upload_file(file_name, bucket, object_name)
+
 
 def log_disk_usage(phase):
     """Logs disk usage statistics to the logger.
@@ -330,6 +306,7 @@ def log_disk_usage(phase):
         logger.error("%sFailed to get disk usage:", e)
         return 0  # Return 0 MB if there is an error retrieving disk usage
 
+
 def valid_file(file_path: str) -> bool:
     """
     Check if a file is valid based on its extension.
@@ -351,6 +328,7 @@ def valid_file(file_path: str) -> bool:
     file_ext = os.path.splitext(file_path)[1].lower()
     return file_ext in valid_extensions
 
+
 def clean_tmp_directory():
     """Remove all files and directories in the specified temporary
     directory."""
@@ -367,8 +345,6 @@ def clean_tmp_directory():
                 try:
                     shutil.rmtree(item_path)
                 except (PermissionError, OSError) as e:
-                    logger.error("Error removing directory %s: %s",
-                                 item_path, e)
+                    logger.error("Error removing directory %s: %s", item_path, e)
     except OSError as e:
         logger.error("Error accessing temporary directory: %s", e)
-        
