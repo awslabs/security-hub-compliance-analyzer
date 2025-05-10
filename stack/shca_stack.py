@@ -91,6 +91,9 @@ class ShcaStack(Stack):
             "failure_notification_email"
         )
 
+        self.role_prefix = self.node.try_get_context("role_prefix") or ""
+        self.permission_boundary_policy_name = self.node.try_get_context("permission_boundary_policy_name") or ""
+
         self.openscap_amazonlinux_image_version = self.node.try_get_context(
             "openscap_amazonlinux_image_version"
         )
@@ -122,6 +125,35 @@ class ShcaStack(Stack):
         self.__create_state_machine()
         self.__create_cloudwatch_event_rule_for_state_machine()
         self.__cdk_output_variables()
+        
+    def __get_role_name(self, base_name: str) -> str:
+        """
+        Applies the role prefix to a base role name if a prefix is configured.
+        
+        Args:
+            base_name (str): The base name for the role
+            
+        Returns:
+            str: The role name with prefix applied if configured
+        """
+        if self.role_prefix:
+            return f"{self.role_prefix}{base_name}"
+        return base_name
+        
+    def __apply_permission_boundary(self, role: iam.Role) -> None:
+        """
+        Applies a permission boundary to a role if configured.
+        
+        Args:
+            role (iam.Role): The role to apply the permission boundary to
+        """
+        if self.permission_boundary_policy_name:
+            boundary_policy = iam.ManagedPolicy.from_managed_policy_name(
+                self,
+                f"{role.role_name}-boundary-policy",
+                self.permission_boundary_policy_name
+            )
+            role.add_managed_policy(boundary_policy)
 
     def __create_kms_key(self) -> kms.Key:
         self.kms_key = kms.Key(
@@ -168,7 +200,7 @@ class ShcaStack(Stack):
         self.vpc_flow_log_group_role = iam.Role(
             self,
             self.stack_env + "-vpc-flow-log-group-role",
-            role_name=self.stack_env + "-Vpc-Flow-Log-Group-Role",
+            role_name=self.__get_role_name(self.stack_env + "-Vpc-Flow-Log-Group-Role"),
             description="",
             assumed_by=iam.ServicePrincipal("vpc-flow-logs.amazonaws.com"),
             managed_policies=[
@@ -179,6 +211,9 @@ class ShcaStack(Stack):
                 ),
             ],
         ).without_policy_updates()
+        
+        # Apply permission boundary if configured
+        self.__apply_permission_boundary(self.vpc_flow_log_group_role)
 
         self.vpc = ec2.Vpc(
             self,
@@ -576,7 +611,7 @@ class ShcaStack(Stack):
         self.parse_nist_controls_function_role = iam.Role(
             self,
             self.stack_env + "-parse-nist-controls-function-role",
-            role_name=self.stack_env + "-Parse-Nist-Controls-Function-Role",
+            role_name=self.__get_role_name(self.stack_env + "-Parse-Nist-Controls-Function-Role"),
             description="",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
@@ -603,6 +638,9 @@ class ShcaStack(Stack):
                 ),
             ],
         ).without_policy_updates()
+        
+        # Apply permission boundary if configured
+        self.__apply_permission_boundary(self.parse_nist_controls_function_role)
 
         self.parse_nist_controls_function = lambda_.Function(
             self,
@@ -645,7 +683,7 @@ class ShcaStack(Stack):
         self.create_summary_function_role = iam.Role(
             self,
             self.stack_env + "-create-summary-function-role",
-            role_name=self.stack_env + "-Create-Summary-Function-Role",
+            role_name=self.__get_role_name(self.stack_env + "-Create-Summary-Function-Role"),
             description="",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
@@ -672,6 +710,9 @@ class ShcaStack(Stack):
                 ),
             ],
         ).without_policy_updates()
+        
+        # Apply permission boundary if configured
+        self.__apply_permission_boundary(self.create_summary_function_role)
 
         self.create_summary_function = lambda_.Function(
             self,
@@ -715,7 +756,7 @@ class ShcaStack(Stack):
         self.create_package_artifacts_function_role = iam.Role(
             self,
             self.stack_env + "-create-package-artifacts-function-role",
-            role_name=self.stack_env + "-Package-Artifacts-Function-Role",
+            role_name=self.__get_role_name(self.stack_env + "-Package-Artifacts-Function-Role"),
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name(
@@ -741,6 +782,9 @@ class ShcaStack(Stack):
                 ),
             ],
         ).without_policy_updates()
+        
+        # Apply permission boundary if configured
+        self.__apply_permission_boundary(self.create_package_artifacts_function_role)
 
         self.create_package_artifacts_function = lambda_.Function(
             self,
