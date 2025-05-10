@@ -173,6 +173,8 @@ Modify the following values in `cdk.json`
     - "schedule_frequency_days": `7` - This setting dictates how often would you like SHCA to generate compliance reporting. 
     - "send_failure_notification_email": `true` or `false` - If `true`, email will be sent to the address provided in `failure_notification_email`.
     - "failure_notification_email": `example@email.com` - This email address will receive notifications upon a failure to execute SHCA.
+    - "role_prefix": `""` - (Optional) Prefix to add to all IAM role names created by the solution. Useful for environments with naming conventions.
+    - "permission_boundary_policy_name": `""` - (Optional) Name of an existing managed policy to use as a permission boundary for all IAM roles created by the solution.
 
 From here you have two options on how to install SHCA (CloudShell or CDK)
 
