@@ -29,7 +29,14 @@ check_and_enable_prerequisites() {
         
         # Enable Config
         CONFIG_ROLE_ARN="arn:$PARTITION:iam::$AWS_ACCOUNT_ID:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig"
-        aws configservice put-configuration-recorder --configuration-recorder name=default,roleARN=$CONFIG_ROLE_ARN --recording-group allSupported=true,includeGlobalResources=true
+        
+        # Handle different parameters for GovCloud vs commercial regions
+        if [[ "$AWS_REGION" == *-gov-* ]]; then
+            aws configservice put-configuration-recorder --configuration-recorder name=default,roleARN=$CONFIG_ROLE_ARN --recording-group allSupported=true,includeGlobalResourceTypes=true
+        else
+            aws configservice put-configuration-recorder --configuration-recorder name=default,roleARN=$CONFIG_ROLE_ARN --recording-group allSupported=true,includeGlobalResources=true
+        fi
+        
         aws configservice put-delivery-channel --delivery-channel name=default,s3BucketName=$CONFIG_BUCKET_NAME
         aws configservice start-configuration-recorder --configuration-recorder-name default
         
@@ -45,6 +52,9 @@ check_and_enable_prerequisites() {
         echo "Security Hub is not enabled. Enabling now..."
         aws securityhub enable-security-hub
         echo "Security Hub has been enabled."
+        # Add a short delay to allow Security Hub to initialize
+        echo "Waiting for Security Hub to initialize..."
+        sleep 10
     else
         echo "Security Hub is already enabled."
     fi

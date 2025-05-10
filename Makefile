@@ -48,11 +48,16 @@ enable-prerequisites:
 	aws s3 mb s3://$$CONFIG_BUCKET_NAME --region $$AWS_REGION 2>/dev/null || true && \
 	echo "Enabling AWS Config..." && \
 	CONFIG_ROLE_ARN="arn:$$PARTITION:iam::$$AWS_ACCOUNT_ID:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig" && \
-	aws configservice put-configuration-recorder --configuration-recorder name=default,roleARN=$$CONFIG_ROLE_ARN --recording-group allSupported=true,includeGlobalResources=true && \
+	if [[ "$$AWS_REGION" == *-gov-* ]]; then \
+		aws configservice put-configuration-recorder --configuration-recorder name=default,roleARN=$$CONFIG_ROLE_ARN --recording-group allSupported=true,includeGlobalResourceTypes=true; \
+	else \
+		aws configservice put-configuration-recorder --configuration-recorder name=default,roleARN=$$CONFIG_ROLE_ARN --recording-group allSupported=true,includeGlobalResources=true; \
+	fi && \
 	aws configservice put-delivery-channel --delivery-channel name=default,s3BucketName=$$CONFIG_BUCKET_NAME && \
 	aws configservice start-configuration-recorder --configuration-recorder-name default && \
 	echo "Enabling Security Hub..." && \
 	aws securityhub enable-security-hub || true && \
+	sleep 5 && \
 	echo "Enabling NIST 800-53 Rev. 5 standard..." && \
 	aws securityhub batch-enable-standards --standards-subscription-requests StandardsArn=arn:$$PARTITION:securityhub:$$AWS_REGION::standards/nist-800-53/v/5.0.0 || true && \
 	echo "✅ All prerequisites are now enabled"
