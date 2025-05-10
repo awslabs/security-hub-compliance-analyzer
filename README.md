@@ -9,6 +9,8 @@ Security Hub with and the NIST Special Publication 800-53 Revision 5 Security St
 ** For more information on enabling this standard visit [Enabling and disabling security standards
 ](https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards-enable-disable.html))
 
+> **Note:** The deployment scripts now include automatic prerequisite checking and enablement. If AWS Config, Security Hub, or the NIST 800-53 Rev. 5 standard are not enabled, the scripts can automatically enable them for you. See the [Deployment Instructions](#deployment-instructions) section for more details.
+
 
 ## Security Hub Compliance Analyzer Diagram
 ![Security Hub Compliance Analyzer Services](images/shca_diagram.png)
@@ -200,6 +202,8 @@ CloudShell is approved by [DISA for use in IL2-IL5 environments, including Comme
 
 `chmod +x cloud_shell_deployment.sh && ./cloud_shell_deployment.sh`
 
+> **Note:** The script will automatically check if AWS Config, Security Hub, and the NIST 800-53 Rev. 5 standard are enabled. If any of these prerequisites are missing, the script will enable them for you before proceeding with the deployment.
+
 Enter `y` when CDK prompts you in the shell **both times**. 
 
 6. Verify that CDK successfully deployed all stacks. 
@@ -209,6 +213,12 @@ Enter `y` when CDK prompts you in the shell **both times**.
     ```
     $ cdk deploy
     ```
+
+> **Note:** If you need to automatically enable AWS Config, Security Hub, and the NIST 800-53 Rev. 5 standard, you can use the following command instead:
+> ```
+> $ make deploy-with-prerequisites
+> ```
+> This will check for and enable all required prerequisites before deploying the solution.
 
 ## Useful commands
 
