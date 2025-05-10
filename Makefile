@@ -58,7 +58,7 @@ enable-prerequisites:
 	aws configservice put-delivery-channel --delivery-channel name=default,s3BucketName=$$CONFIG_BUCKET_NAME && \
 	aws configservice start-configuration-recorder --configuration-recorder-name default && \
 	echo "Enabling Security Hub..." && \
-	aws securityhub enable-security-hub || true && \
+	aws securityhub enable-security-hub --enable-default-standards false || true && \
 	echo "Waiting for Security Hub to initialize (15 seconds)..." && \
 	sleep 15 && \
 	echo "Enabling NIST 800-53 Rev. 5 standard..." && \

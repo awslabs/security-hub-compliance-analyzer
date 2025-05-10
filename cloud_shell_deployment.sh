@@ -54,7 +54,7 @@ check_and_enable_prerequisites() {
     
     if [ $? -ne 0 ]; then
         echo "Security Hub is not enabled. Enabling now..."
-        aws securityhub enable-security-hub
+        aws securityhub enable-security-hub --enable-default-standards false
         echo "Security Hub has been enabled."
         # Add a longer delay to allow Security Hub to initialize
         echo "Waiting for Security Hub to initialize (15 seconds)..."
