@@ -219,12 +219,6 @@ class ShcaStack(Stack):
             description="Allow HTTPS from VPC CIDR Block",
         )
 
-        self.vpc_endpoint_security_group.add_egress_rule(
-            peer=ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
-            connection=ec2.Port.tcp(443),
-            description="Allow HTTPS from VPC CIDR Block",
-        )
-
         self.vpc.add_interface_endpoint(
             self.stack_env + "-KmsFipsEndpoint",
             service=ec2.InterfaceVpcEndpointAwsService.KMS_FIPS,
@@ -305,7 +299,26 @@ class ShcaStack(Stack):
             vpc=self.vpc,
             description=self.stack_env + "-Lambda-Security-Group",
             security_group_name=self.stack_env + "-Lambda-Security-Group",
-            allow_all_outbound=True,
+            allow_all_outbound=False,
+        )
+
+        s3_prefix_list = ec2.PrefixList.from_lookup(
+            self,
+            self.stack_env + "-s3-prefix-list",
+            prefix_list_name=f"com.amazonaws.{self.region}.s3"
+        )
+
+        self.lambda_security_group.add_egress_rule(
+            peer=ec2.Peer.prefix_list(s3_prefix_list.prefix_list_id),
+            connection=ec2.Port.tcp(443),
+            description="Allow HTTPS to S3 prefix list",
+        )
+
+        # For VPC endpoints
+        self.lambda_security_group.add_egress_rule(
+            peer=ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            connection=ec2.Port.tcp(443),
+            description="Allow HTTPS to VPC CIDR Block",
         )
 
     def __create_aws_sdk_for_pandas_layer(self) -> lambda_.LayerVersion:
@@ -327,9 +340,10 @@ class ShcaStack(Stack):
             master_key=self.kms_key,
         )
 
-        self.sns_topic.add_subscription(
-            subscriptions.EmailSubscription(self.failure_notification_email)
-        )
+        if self.send_failure_notification_email:
+            self.sns_topic.add_subscription(
+                subscriptions.EmailSubscription(self.failure_notification_email)
+            )
 
     def __create_dead_letter_queue(self) -> sqs.Queue:
         """Creates SQS dead letter queue"""
@@ -375,6 +389,7 @@ class ShcaStack(Stack):
                         "securityhub:GetFindings",
                         "securityhub:BatchImportFindings",
                         "securityhub:GetEnabledStandards",
+                        "securityhub:DescribeStandardsControls",
                     ],
                     resources=[
                         f"arn:{partition}:securityhub:{region}:{account_id}:hub/default",

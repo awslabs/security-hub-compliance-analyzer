@@ -87,13 +87,13 @@ pip3 --version
 virtualenv --version
 ```
 
-#### wget (optional for update_aws_wrangler.sh)
+#### wget (if using `update_aws_wrangler.sh` script to download AWS Wrangler)
 
 ```bash
 wget --version
 ```
 
-#### jq (optional for update_aws_wrangler.sh)
+#### jq (if using `update_aws_wrangler.sh` script to download AWS Wrangler)
 
 ```bash
 jq --version
