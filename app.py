@@ -10,7 +10,7 @@ stack_env = app.node.try_get_context("environment")
 shca_stack = ShcaStack(
     app,
     stack_env + "-app-stack",
-    description="Security Hub Compliance Analyzer Application Stack",
+    description="Security Hub Compliance Analyzer Application Stack (uksb-mq8bedrw3a)",
     env=cdk.Environment(
         region=os.environ["CDK_DEFAULT_REGION"],
         account=os.environ["CDK_DEFAULT_ACCOUNT"],
