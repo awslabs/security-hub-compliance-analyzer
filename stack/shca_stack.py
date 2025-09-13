@@ -223,13 +223,6 @@ class ShcaStack(Stack):
             description="Allow HTTPS from VPC CIDR Block",
         )
 
-        self.vpc.add_interface_endpoint(
-            self.stack_env + ("-KmsFipsEndpoint" if self.partition != "aws-iso-b" else "-KmsEndpoint"),
-            service=ec2.InterfaceVpcEndpointAwsService.KMS_FIPS if self.partition != "aws-iso-b" else ec2.InterfaceVpcEndpointAwsService.KMS,
-            private_dns_enabled=True,
-            security_groups=[self.vpc_endpoint_security_group],
-        )
-
         self.vpc.add_gateway_endpoint(
             self.stack_env + "-S3GatewayEndpoint",
             service=ec2.GatewayVpcEndpointAwsService.S3,
@@ -242,27 +235,6 @@ class ShcaStack(Stack):
                 private_dns_enabled=True,
                 security_groups=[self.vpc_endpoint_security_group],
             )
-
-        # self.vpc.add_interface_endpoint(
-        #     self.stack_env + "-Ec2Endpoint",
-        #     service=ec2.InterfaceVpcEndpointAwsService.EC2,
-        #     private_dns_enabled=True,
-        #     security_groups=[self.vpc_endpoint_security_group],
-        # )
-
-        self.vpc.add_interface_endpoint(
-            self.stack_env + "-CloudWatchLogsEndpoint",
-            service=ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
-            private_dns_enabled=True,
-            security_groups=[self.vpc_endpoint_security_group],
-        )
-
-        self.vpc.add_interface_endpoint(
-            self.stack_env + "-StepFunctionsEndpoint",
-            service=ec2.InterfaceVpcEndpointAwsService.STEP_FUNCTIONS,
-            private_dns_enabled=True,
-            security_groups=[self.vpc_endpoint_security_group],
-        )
 
     def __create_s3_buckets(self):
         self.s3_access_logs_bucket = s3.Bucket(
