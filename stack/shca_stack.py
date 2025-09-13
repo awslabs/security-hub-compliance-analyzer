@@ -108,7 +108,6 @@ class ShcaStack(Stack):
         self.__create_lambda_security_group()
         self.__create_aws_sdk_for_pandas_layer()
         self.__create_sns_topic()
-        self.__create_dead_letter_queue()
         self.__create_managed_policies()
         self.__create_1_config_rules_scrape_function()
         self.__create_2_parse_nist_controls_function()
@@ -376,17 +375,6 @@ class ShcaStack(Stack):
                 subscriptions.EmailSubscription(self.failure_notification_email)
             )
 
-    def __create_dead_letter_queue(self) -> sqs.Queue:
-        """Creates SQS dead letter queue"""
-        self.dead_letter_queue = sqs.Queue(
-            self,
-            self.stack_env + "-dead-letter-queue",
-            queue_name=self.stack_env + "-Dead-Letter-Queue",
-            visibility_timeout=Duration.seconds(30),
-            retention_period=Duration.days(7),
-            encryption=sqs.QueueEncryption.KMS_MANAGED,
-        )
-
     def __create_managed_policies(self) -> List[iam.ManagedPolicy]:
         """
         Creates IAM managed policies required by the application.
@@ -489,22 +477,6 @@ class ShcaStack(Stack):
             ],
         )
 
-        self.sqs_policy = iam.ManagedPolicy(
-            self,
-            self.stack_env + "-sqs-policy",
-            managed_policy_name=self.stack_env + "-SQS-Policy",
-            statements=[
-                iam.PolicyStatement(
-                    actions=[
-                        "sqs:SendMessage",
-                    ],
-                    effect=iam.Effect.ALLOW,
-                    resources=[self.dead_letter_queue.queue_arn],
-                    sid="SQSPolicy",
-                )
-            ],
-        )
-
         self.sns_policy = iam.ManagedPolicy(
             self,
             self.stack_env + "-sns-policy",
@@ -561,11 +533,6 @@ class ShcaStack(Stack):
                 ),
                 iam.ManagedPolicy.from_managed_policy_arn(
                     self,
-                    self.stack_env + "-1-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
                     self.stack_env + "-1-kms-policy-arn",
                     managed_policy_arn=self.kms_policy.managed_policy_arn,
                 ),
@@ -592,11 +559,8 @@ class ShcaStack(Stack):
             memory_size=4096,
             ephemeral_storage_size=Size.mebibytes(4096),
             allow_public_subnet=False,
-            retry_attempts=0,
             environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
             reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
             role=self.config_rules_scrape_function_role,
             environment_encryption=self.kms_key,
         )
@@ -625,6 +589,16 @@ class ShcaStack(Stack):
                 ],
             )
 
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.config_rules_scrape_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
+        )
+
     def __create_2_parse_nist_controls_function(self) -> lambda_.Function:
         """
         Creates the Lambda function that parses NIST controls.
@@ -648,11 +622,6 @@ class ShcaStack(Stack):
                 ),
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-2-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
                 ),
                 iam.ManagedPolicy.from_managed_policy_arn(
                     self,
@@ -684,14 +653,21 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            retry_attempts=0,
             environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
             role=self.parse_nist_controls_function_role,
             environment_encryption=self.kms_key,
+        )
+
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.parse_nist_controls_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
         )
 
     def __create_3_create_summary_function(self) -> lambda_.Function:
@@ -717,11 +693,6 @@ class ShcaStack(Stack):
                 ),
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-3-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
                 ),
                 iam.ManagedPolicy.from_managed_policy_arn(
                     self,
@@ -753,14 +724,21 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            retry_attempts=0,
             environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
             role=self.create_summary_function_role,
             environment_encryption=self.kms_key,
+        )
+
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.create_summary_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
         )
 
     def __create_4_package_artifacts_function(self) -> lambda_.Function:
@@ -786,11 +764,6 @@ class ShcaStack(Stack):
                 ),
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-4-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
                 ),
                 iam.ManagedPolicy.from_managed_policy_arn(
                     self,
@@ -822,14 +795,21 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            retry_attempts=0,
             environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
             role=self.create_package_artifacts_function_role,
             environment_encryption=self.kms_key,
+        )
+
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.create_package_artifacts_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
         )
 
     def __create_5_create_ocsf_function(self):
@@ -856,11 +836,6 @@ class ShcaStack(Stack):
                 ),
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-5-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
                 ),
                 iam.ManagedPolicy.from_managed_policy_arn(
                     self,
@@ -892,14 +867,21 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            retry_attempts=0,
             environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
             role=self.create_ocsf_function_role,
             environment_encryption=self.kms_key,
+        )
+
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.create_ocsf_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
         )
 
     def __create_6_create_oscal_function(self):
@@ -921,11 +903,6 @@ class ShcaStack(Stack):
                 ),
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-6-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
                 ),
                 iam.ManagedPolicy.from_managed_policy_arn(
                     self,
@@ -957,14 +934,21 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            retry_attempts=0,
             environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
             role=self.create_oscal_function_role,
             environment_encryption=self.kms_key,
+        )
+
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.create_oscal_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
         )
 
     def __create_step_function_log_group(self):
