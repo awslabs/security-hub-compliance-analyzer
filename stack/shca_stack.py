@@ -367,7 +367,7 @@ class ShcaStack(Stack):
             self,
             self.stack_env + "-sns-topic",
             topic_name=self.stack_env + "-SNS-Topic",
-            display_name=self.stack_env,
+            display_name=self.stack_env + " - StepFunction Failure Notification",
             master_key=self.kms_key,
         )
 
