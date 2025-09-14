@@ -369,28 +369,16 @@ class ShcaStack(Stack):
                 subscriptions.EmailSubscription(self.failure_notification_email)
             )
 
-    def __create_managed_policies(self) -> List[iam.ManagedPolicy]:
+    def __create_managed_policies(self):
         """
         Creates IAM managed policies required by the application.
 
         This method defines several IAM managed policies for Lambda
         function execution roles, including policies for Security Hub, KMS,
-        S3, SQS and SNS. The policies are returned as a list.
+        S3, SQS and SNS.
         """
         # Construct S3 bucket ARN
         s3_bucket_arn = self.s3_resource_bucket.bucket_arn
-
-        # Account ID
-        account_id = os.environ["CDK_DEFAULT_ACCOUNT"]
-
-        # Determine the partition dynamically
-        region = os.environ["CDK_DEFAULT_REGION"]
-        if region.startswith("us-gov-"):
-            partition = "aws-us-gov"
-        elif region.startswith("cn-"):
-            partition = "aws-cn"
-        else:
-            partition = "aws"
 
         self.security_hub_lambda_policy = iam.ManagedPolicy(
             self,
@@ -405,8 +393,8 @@ class ShcaStack(Stack):
                         "securityhub:DescribeStandardsControls",
                     ],
                     resources=[
-                        f"arn:{partition}:securityhub:{region}:{account_id}:hub/default",
-                        f"arn:{partition}:securityhub:{region}:{account_id}:product/*",
+                        f"arn:{self.partition}:securityhub:{self.region}:{self.account}:hub/default",
+                        f"arn:{self.partition}:securityhub:{self.region}:{self.account}:product/*",
                     ],
                     effect=iam.Effect.ALLOW,
                     sid="SecurityHubLambdaPolicy",
