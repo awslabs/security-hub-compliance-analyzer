@@ -174,13 +174,7 @@ class ShcaStack(Stack):
             role_name=self.stack_env + "-Vpc-Flow-Log-Group-Role",
             description="",
             assumed_by=iam.ServicePrincipal("vpc-flow-logs.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-vpc-flow-log-group-policy-arn",
-                    managed_policy_arn=self.vpc_flow_log_group_policy.managed_policy_arn,
-                ),
-            ],
+            managed_policies=[self.vpc_flow_log_group_policy],
         ).without_policy_updates()
 
         self.vpc = ec2.Vpc(
@@ -493,6 +487,10 @@ class ShcaStack(Stack):
             ],
         )
 
+        # AWS-managed policies
+        self.lambda_basic_execution_policy = iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
+        self.lambda_vpc_access_policy = iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaVPCAccessExecutionRole")
+
         # self.step_function_policy = iam.ManagedPolicy(
         #     self,
         #     self.stack_env + "-step-function-policy",
@@ -525,27 +523,11 @@ class ShcaStack(Stack):
             description="",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-1-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-1-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-1-security-hub-policy-arn",
-                    managed_policy_arn=self.security_hub_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
+                self.security_hub_lambda_policy,
             ],
         ).without_policy_updates()
 
@@ -617,22 +599,10 @@ class ShcaStack(Stack):
             description="",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-2-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-2-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
             ],
         ).without_policy_updates()
 
@@ -688,22 +658,10 @@ class ShcaStack(Stack):
             description="",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-3-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-3-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
             ],
         ).without_policy_updates()
 
@@ -759,22 +717,10 @@ class ShcaStack(Stack):
             role_name=self.stack_env + "-Package-Artifacts-Function-Role",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-4-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-4-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
             ],
         ).without_policy_updates()
 
@@ -831,22 +777,10 @@ class ShcaStack(Stack):
             role_name=self.stack_env + "-Create-OCSF-Function-Role",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-5-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-5-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
             ],
         ).without_policy_updates()
 
@@ -898,22 +832,10 @@ class ShcaStack(Stack):
             role_name=self.stack_env + "-Create-OSCAL-Function-Role",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-6-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-6-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
             ],
         ).without_policy_updates()
 
@@ -1012,21 +934,9 @@ class ShcaStack(Stack):
             description="",
             assumed_by=iam.ServicePrincipal("states.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-states-policy-arn",
-                    managed_policy_arn=self.states_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-states-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-states-sns-policy-arn",
-                    managed_policy_arn=self.sns_policy.managed_policy_arn,
-                ),
+                self.states_policy,
+                self.kms_policy,
+                self.sns_policy,
             ],
         )
 
@@ -1159,13 +1069,7 @@ class ShcaStack(Stack):
             role_name=self.stack_env + "-Event-Role",
             description="",
             assumed_by=iam.ServicePrincipal("events.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-events-policy-arn",
-                    managed_policy_arn=self.events_policy.managed_policy_arn,
-                ),
-            ],
+            managed_policies=[self.events_policy],
         ).without_policy_updates()
 
         self.shca_event_rule = events.Rule(
