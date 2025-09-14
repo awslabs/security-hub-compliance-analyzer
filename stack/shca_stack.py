@@ -495,6 +495,13 @@ class ShcaStack(Stack):
         #     ],
         # )
 
+    def __get_lambda_environment(self) -> dict:
+        """Get base Lambda environment variables"""
+        env = {"BUCKET_NAME": self.s3_resource_bucket.bucket_name}
+        if self.partition == "aws-iso-b":
+            env["AWS_CA_BUNDLE"] = "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+        return env
+
     def __create_1_config_rules_scrape_function(self) -> lambda_.Function:
         """
         Creates a Lambda function responsible for making API calls to Security Hub
@@ -529,10 +536,10 @@ class ShcaStack(Stack):
             memory_size=4096,
             ephemeral_storage_size=Size.mebibytes(4096),
             allow_public_subnet=False,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
+            environment=self.__get_lambda_environment(),
+            environment_encryption=self.kms_key,
             reserved_concurrent_executions=1,
             role=self.config_rules_scrape_function_role,
-            environment_encryption=self.kms_key,
         )
 
         if self.partition != "aws-iso-b":
@@ -611,11 +618,11 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
+            environment=self.__get_lambda_environment(),
+            environment_encryption=self.kms_key,
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
             role=self.parse_nist_controls_function_role,
-            environment_encryption=self.kms_key,
         )
 
         cdknag.NagSuppressions.add_resource_suppressions(
@@ -670,11 +677,11 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
+            environment=self.__get_lambda_environment(),
+            environment_encryption=self.kms_key,
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
             role=self.create_summary_function_role,
-            environment_encryption=self.kms_key,
         )
 
         cdknag.NagSuppressions.add_resource_suppressions(
@@ -729,11 +736,11 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
+            environment=self.__get_lambda_environment(),
+            environment_encryption=self.kms_key,
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
             role=self.create_package_artifacts_function_role,
-            environment_encryption=self.kms_key,
         )
 
         cdknag.NagSuppressions.add_resource_suppressions(
@@ -789,11 +796,11 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
+            environment=self.__get_lambda_environment(),
+            environment_encryption=self.kms_key,
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
             role=self.create_ocsf_function_role,
-            environment_encryption=self.kms_key,
         )
 
         cdknag.NagSuppressions.add_resource_suppressions(
@@ -844,11 +851,11 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
+            environment=self.__get_lambda_environment(),
+            environment_encryption=self.kms_key,
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
             role=self.create_oscal_function_role,
-            environment_encryption=self.kms_key,
         )
 
         cdknag.NagSuppressions.add_resource_suppressions(
