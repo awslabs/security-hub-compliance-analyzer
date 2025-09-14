@@ -173,7 +173,14 @@ class ShcaStack(Stack):
             self.stack_env + "-vpc-flow-log-group-role",
             role_name=self.stack_env + "-Vpc-Flow-Log-Group-Role",
             description="",
-            assumed_by=iam.ServicePrincipal("vpc-flow-logs.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "vpc-flow-logs.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[self.vpc_flow_log_group_policy],
         ).without_policy_updates()
 
@@ -475,6 +482,34 @@ class ShcaStack(Stack):
             ],
         )
 
+        # https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html#configuration-vpc-best-practice-security
+        self.vpc_best_practice_security = iam.ManagedPolicy(
+            self,
+            self.stack_env + "-vpc-best-practice-policy",
+            managed_policy_name=self.stack_env + "-VPC-Best-Practice-Policy",
+            statements=[
+                iam.PolicyStatement(
+                    actions=[
+                        "ec2:CreateNetworkInterface",
+                        "ec2:DeleteNetworkInterface",
+                        "ec2:DescribeNetworkInterfaces",
+                        "ec2:DescribeSubnets",
+                        "ec2:DetachNetworkInterface",
+                        "ec2:AssignPrivateIpAddresses",
+                        "ec2:UnassignPrivateIpAddresses",
+                    ],
+                    effect=iam.Effect.DENY,
+                    resources=["*"],
+                    conditions={
+                        "ArnLike": {
+                            "lambda:SourceFunctionArn": [f"arn:{self.partition}:lambda:{self.region}:{self.account}:function:*"]
+                        }
+                    },
+                    sid="VPCBestPracticePolicy",
+                )
+            ],
+        )
+
         # AWS-managed policies
         self.lambda_basic_execution_policy = iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
         self.lambda_vpc_access_policy = iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaVPCAccessExecutionRole")
@@ -516,13 +551,21 @@ class ShcaStack(Stack):
             self.stack_env + "-config-rules-scrape-function-role",
             role_name=self.stack_env + "-Config-Rules-Scrape-Function-Role",
             description="",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 self.lambda_basic_execution_policy,
                 self.lambda_vpc_access_policy,
                 self.kms_policy,
                 self.s3_lambda_policy,
                 self.security_hub_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
@@ -592,12 +635,20 @@ class ShcaStack(Stack):
             self.stack_env + "-parse-nist-controls-function-role",
             role_name=self.stack_env + "-Parse-Nist-Controls-Function-Role",
             description="",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 self.lambda_basic_execution_policy,
                 self.lambda_vpc_access_policy,
                 self.kms_policy,
                 self.s3_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
@@ -651,12 +702,20 @@ class ShcaStack(Stack):
             self.stack_env + "-create-summary-function-role",
             role_name=self.stack_env + "-Create-Summary-Function-Role",
             description="",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 self.lambda_basic_execution_policy,
                 self.lambda_vpc_access_policy,
                 self.kms_policy,
                 self.s3_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
@@ -710,12 +769,20 @@ class ShcaStack(Stack):
             self,
             self.stack_env + "-create-package-artifacts-function-role",
             role_name=self.stack_env + "-Package-Artifacts-Function-Role",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 self.lambda_basic_execution_policy,
                 self.lambda_vpc_access_policy,
                 self.kms_policy,
                 self.s3_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
@@ -770,12 +837,20 @@ class ShcaStack(Stack):
             self,
             self.stack_env + "-create-ocsf-function-function-role",
             role_name=self.stack_env + "-Create-OCSF-Function-Role",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 self.lambda_basic_execution_policy,
                 self.lambda_vpc_access_policy,
                 self.kms_policy,
                 self.s3_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
@@ -825,12 +900,20 @@ class ShcaStack(Stack):
             self,
             self.stack_env + "-create-oscal-function-function-role",
             role_name=self.stack_env + "-Create-OSCAL-Function-Role",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 self.lambda_basic_execution_policy,
                 self.lambda_vpc_access_policy,
                 self.kms_policy,
                 self.s3_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
@@ -927,7 +1010,14 @@ class ShcaStack(Stack):
             self.stack_env + "-state-machine-role",
             role_name=self.stack_env + "-State-Machine-Role",
             description="",
-            assumed_by=iam.ServicePrincipal("states.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "states.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 self.states_policy,
                 self.kms_policy,
@@ -1063,7 +1153,14 @@ class ShcaStack(Stack):
             self.stack_env + "-event-role",
             role_name=self.stack_env + "-Event-Role",
             description="",
-            assumed_by=iam.ServicePrincipal("events.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "events.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[self.events_policy],
         ).without_policy_updates()
 
