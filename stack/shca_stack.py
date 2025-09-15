@@ -260,6 +260,24 @@ class ShcaStack(Stack):
             # ]
         )
 
+        # https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html#example-bucket-policies-global-condition-keys-1
+        self.s3_access_logs_bucket.add_to_resource_policy(
+            iam.PolicyStatement(
+                sid="RestrictToS3ServerAccessLogs",
+                effect=iam.Effect.DENY,
+                principals=[iam.StarPrincipal()],
+                actions=["s3:PutObject"],
+                resources=[
+                    self.s3_access_logs_bucket.arn_for_objects("*"),
+                ],
+                conditions={
+                    "ForAllValues:StringNotEquals": {
+                        "aws:PrincipalServiceNamesList": "logging.s3.amazonaws.com",
+                    }
+                },
+            )
+        )
+
         self.s3_access_logs_bucket.add_lifecycle_rule(
             id="DeleteAfter365Days",
             enabled=True,
