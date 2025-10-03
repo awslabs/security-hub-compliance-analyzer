@@ -18,8 +18,8 @@ shca_stack = ShcaStack(
 )
 
 cdk.Tags.of(shca_stack).add(
-    "Application",
-    "SHCA",
+    key="Application",
+    value="SHCA",
 )
 
 # Use NIST80053R5Checks instead of AwsSolutionsChecks
