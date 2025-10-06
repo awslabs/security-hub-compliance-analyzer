@@ -63,7 +63,7 @@ class ShcaStack(Stack):
 
         # pylint: disable=line-too-long
         # fmt: off
-        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.8.0-py3.11.zip"
+        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.13.0-py3.11.zip"
 
         # Set variables from cdk context
         self.stack_env = self.node.try_get_context("environment")
@@ -98,6 +98,9 @@ class ShcaStack(Stack):
         self.openscap_amazonlinux_image_version_hash = self.node.try_get_context(
             "openscap_amazonlinux_image_version_hash"
         )
+
+        # Set account ID from CDK Stack property
+        self.account_id = self.account
 
         # Function calls to create resources
         self.__create_kms_key()
@@ -262,7 +265,7 @@ class ShcaStack(Stack):
         self.s3_resource_bucket = s3.Bucket(
             self,
             self.stack_env + "-resources",
-            bucket_name=self.stack_env + "-resources-" + self.account,
+            bucket_name=self.stack_env + "-resources-" + self.account_id,
             encryption=s3.BucketEncryption.KMS,
             bucket_key_enabled=True,
             encryption_key=self.kms_key,
