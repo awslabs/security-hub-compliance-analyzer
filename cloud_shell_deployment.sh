@@ -1,6 +1,9 @@
 #!/bin/bash
 
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+AWS_REGION=$(aws configure get region)
+export CDK_DEFAULT_ACCOUNT=$AWS_ACCOUNT_ID
+export CDK_DEFAULT_REGION=$AWS_REGION
 echo "$AWS_ACCOUNT_ID"
 echo "$AWS_REGION"
 echo "aws://$AWS_ACCOUNT_ID/$AWS_REGION"
