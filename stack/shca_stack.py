@@ -101,7 +101,7 @@ class ShcaStack(Stack):
         self.__create_vpc_flow_log_group()
         self.__create_vpc()
         self.__create_vpc_endpoints()
-        self.__create_s3_buckets()
+        self.__create_s3_bucket()
         self.__create_lambda_security_group()
         self.__create_aws_sdk_for_pandas_layer()
         self.__create_sns_topic()
@@ -130,10 +130,6 @@ class ShcaStack(Stack):
 
         self.kms_key.grant_encrypt_decrypt(
             iam.ServicePrincipal("logs.amazonaws.com"),
-        )
-
-        self.kms_key.grant_encrypt_decrypt(
-            iam.ServicePrincipal("s3.amazonaws.com"),
         )
 
     def __create_vpc_flow_log_group(self) -> None:
@@ -233,78 +229,7 @@ class ShcaStack(Stack):
                 security_groups=[self.vpc_endpoint_security_group],
             )
 
-    def __create_s3_buckets(self) -> None:
-        self.s3_access_logs_bucket = s3.Bucket(
-            self,
-            self.stack_env + "-access-logs",
-            bucket_name=self.stack_env + "-access-logs-" + self.account,
-            encryption=s3.BucketEncryption.KMS,
-            encryption_key=self.kms_key,
-            bucket_key_enabled=True,
-            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
-            removal_policy=RemovalPolicy.DESTROY,
-            enforce_ssl=True,
-            minimum_tls_version=1.2,
-            versioned=True,
-            # Commented out, as adding lifecycle rules directly to the bucket does not work as expected
-            # lifecycle_rules=[
-            #     dict(
-            #         enabled=True,
-            #         expiration=Duration.days(365),
-            #         noncurrent_version_expiration=Duration.days(180),
-            #     ),
-            #     dict(
-            #         enabled=True,
-            #         expired_object_delete_marker=True,
-            #     )
-            # ]
-        )
-
-        # https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html#example-bucket-policies-global-condition-keys-1
-        self.s3_access_logs_bucket.add_to_resource_policy(
-            iam.PolicyStatement(
-                sid="RestrictToS3ServerAccessLogs",
-                effect=iam.Effect.DENY,
-                principals=[iam.StarPrincipal()],
-                actions=["s3:PutObject"],
-                resources=[
-                    self.s3_access_logs_bucket.arn_for_objects("*"),
-                ],
-                conditions={
-                    "ForAllValues:StringNotEquals": {
-                        "aws:PrincipalServiceNamesList": "logging.s3.amazonaws.com",
-                    }
-                },
-            )
-        )
-
-        self.s3_access_logs_bucket.add_lifecycle_rule(
-            id="DeleteAfter365Days",
-            enabled=True,
-            expiration=Duration.days(365),
-            noncurrent_version_expiration=Duration.days(180),
-        )
-
-        self.s3_access_logs_bucket.add_lifecycle_rule(
-            id="ExpiredObjectDeleteMarkerLifecycleRule",
-            enabled=True,
-            expired_object_delete_marker=True,
-        )
-
-        cdknag.NagSuppressions.add_resource_suppressions(
-            construct=self.s3_access_logs_bucket,
-            suppressions=[
-                {
-                    "id": "NIST.800.53.R5-S3BucketLoggingEnabled",
-                    "reason": "Access logs bucket itself should not have server access logging enabled.",
-                },
-                {
-                    "id": "NIST.800.53.R5-S3BucketReplicationEnabled",
-                    "reason": "Operationally not required.",
-                },
-            ],
-        )
-
+    def __create_s3_bucket(self) -> None:
         self.s3_resource_bucket = s3.Bucket(
             self,
             self.stack_env + "-resources",
@@ -317,7 +242,6 @@ class ShcaStack(Stack):
             enforce_ssl=True,
             minimum_tls_version=1.2,
             versioned=True,
-            server_access_logs_bucket=self.s3_access_logs_bucket,
             auto_delete_objects=False,
         )
 
@@ -332,6 +256,10 @@ class ShcaStack(Stack):
             suppressions=[
                 {
                     "id": "NIST.800.53.R5-S3BucketReplicationEnabled",
+                    "reason": "Operationally not required.",
+                },
+                {
+                    "id": "NIST.800.53.R5-S3BucketLoggingEnabled",
                     "reason": "Operationally not required.",
                 },
             ],
