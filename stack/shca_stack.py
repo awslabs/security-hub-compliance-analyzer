@@ -38,6 +38,7 @@ from aws_cdk import Duration
 from aws_cdk import RemovalPolicy
 from aws_cdk import Stack
 from aws_cdk import Size
+from aws_cdk import Tags
 from constructs import Construct
 
 
@@ -69,7 +70,6 @@ class ShcaStack(Stack):
         # Set variables from cdk context
         self.stack_env = self.node.try_get_context("environment")
         self.vpc_cidr = self.node.try_get_context("vpc_cidr")
-
         self.cidr_mask = self.node.try_get_context("cidr_mask")
 
         # Validate that the cidr_mask value is present
@@ -241,6 +241,7 @@ class ShcaStack(Stack):
             private_dns_enabled=True,
             security_groups=[self.vpc_endpoint_security_group],
         )
+
         # self.vpc.add_interface_endpoint(
         #     self.stack_env + "-Ec2Endpoint",
         #     service=ec2.InterfaceVpcEndpointAwsService.EC2,
@@ -262,7 +263,7 @@ class ShcaStack(Stack):
             security_groups=[self.vpc_endpoint_security_group],
         )
 
-    def __create_s3_bucket(self) -> s3.Bucket:
+    def __create_s3_bucket(self) -> None:
         self.s3_resource_bucket = s3.Bucket(
             self,
             self.stack_env + "-resources",
@@ -273,8 +274,8 @@ class ShcaStack(Stack):
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             removal_policy=RemovalPolicy.DESTROY,
             enforce_ssl=True,
+            minimum_tls_version=1.2,
             versioned=True,
-            server_access_logs_prefix="server_access_logs",
             auto_delete_objects=False,
         )
 
@@ -284,12 +285,15 @@ class ShcaStack(Stack):
             noncurrent_version_expiration=Duration.days(self.artifact_replicas_to_retain * 7),  # Assuming weekly backups
         )
 
-
         cdknag.NagSuppressions.add_resource_suppressions(
             construct=self.s3_resource_bucket,
             suppressions=[
                 {
                     "id": "NIST.800.53.R5-S3BucketReplicationEnabled",
+                    "reason": "Operationally not required.",
+                },
+                {
+                    "id": "NIST.800.53.R5-S3BucketLoggingEnabled",
                     "reason": "Operationally not required.",
                 },
             ],
@@ -1156,6 +1160,9 @@ class ShcaStack(Stack):
                 machine=self.shca_state_machine, role=self.event_role
             ),
         )
+
+        if self.partition == "aws-us-gov":
+            Tags.of(self.shca_event_rule).remove("Application")
 
     # ------------------------------------------------------------------------------------
     def __cdk_output_variables(self):
