@@ -64,7 +64,7 @@ class ShcaStack(Stack):
 
         # pylint: disable=line-too-long
         # fmt: off
-        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.13.0-py3.11.zip"
+        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.15.0-py3.11.zip"
 
         # Set variables from cdk context
         self.stack_env = self.node.try_get_context("environment")
@@ -1144,13 +1144,9 @@ class ShcaStack(Stack):
             schedule=events.Schedule.rate(Duration.days(self.schedule_frequency_days)),
         )
 
-        # Handle EventBridge rule tagging based on region type
         # GovCloud regions don't support tags on EventBridge rules
-        current_region = self.region
-        if current_region and ("gov" in current_region):
-            # GovCloud - don't apply tags to EventBridge rules
+        if self.region and self.region.startswith("us-gov-"):
             cdk.Tags.of(self.shca_event_rule).remove("Application")
-        # Commercial regions support EventBridge rule tags (no action needed)
 
         self.shca_event_rule.add_target(
             targets.SfnStateMachine(
