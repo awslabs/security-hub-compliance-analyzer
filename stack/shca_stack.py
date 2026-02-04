@@ -19,6 +19,7 @@ the target AWS account and region.
 from typing import List
 import os
 import cdk_nag as cdknag
+import aws_cdk as cdk
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as targets
@@ -63,7 +64,7 @@ class ShcaStack(Stack):
 
         # pylint: disable=line-too-long
         # fmt: off
-        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.13.0-py3.11.zip"
+        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.15.0-py3.11.zip"
 
         # Set variables from cdk context
         self.stack_env = self.node.try_get_context("environment")
@@ -1145,6 +1146,10 @@ class ShcaStack(Stack):
             rule_name=self.stack_env + "-event-rule",
             schedule=events.Schedule.rate(Duration.days(self.schedule_frequency_days)),
         )
+
+        # GovCloud regions don't support tags on EventBridge rules
+        if self.region and self.region.startswith("us-gov-"):
+            cdk.Tags.of(self.shca_event_rule).remove("Application")
 
         self.shca_event_rule.add_target(
             targets.SfnStateMachine(
