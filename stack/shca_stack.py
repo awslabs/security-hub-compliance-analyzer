@@ -100,6 +100,9 @@ class ShcaStack(Stack):
             "openscap_amazonlinux_image_version_hash"
         )
 
+        # Set account ID from CDK Stack property
+        self.account_id = self.account
+
         # Function calls to create resources
         self.__create_kms_key()
         self.__create_vpc_flow_log_group()
@@ -263,7 +266,7 @@ class ShcaStack(Stack):
         self.s3_resource_bucket = s3.Bucket(
             self,
             self.stack_env + "-resources",
-            bucket_name=self.stack_env + "-resources-" + self.account,
+            bucket_name=self.stack_env + "-resources-" + self.account_id,
             encryption=s3.BucketEncryption.KMS,
             bucket_key_enabled=True,
             encryption_key=self.kms_key,
