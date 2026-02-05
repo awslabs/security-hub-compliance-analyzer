@@ -42,6 +42,7 @@
     "@aws-cdk/aws-kms:aliasNameRef": true,
     "@aws-cdk/core:includePrefixInUniqueNameGeneration": true,
     "environment": "shca",
+    "existing_vpc_id": "",
     "vpc_cidr": "10.30.0.0/24",
     "cidr_mask": 26,
     "schedule_frequency_days": 7,

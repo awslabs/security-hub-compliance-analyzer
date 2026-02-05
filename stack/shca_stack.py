@@ -62,10 +62,11 @@ class ShcaStack(Stack):
 
         # pylint: disable=line-too-long
         # fmt: off
-        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.15.0-py3.11.zip"
+        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.15.1-py3.11.zip"
 
         # Set variables from cdk context
         self.stack_env = self.node.try_get_context("environment")
+        self.existing_vpc_id = self.node.try_get_context("existing_vpc_id")
         self.vpc_cidr = self.node.try_get_context("vpc_cidr")
         self.cidr_mask = self.node.try_get_context("cidr_mask")
 
@@ -148,6 +149,16 @@ class ShcaStack(Stack):
         )
 
     def __create_vpc(self) -> None:
+        # Mode A: Use existing VPC
+        if self.existing_vpc_id:
+            self.vpc = ec2.Vpc.from_lookup(
+                self,
+                self.stack_env + "-vpc",
+                vpc_id=self.existing_vpc_id
+            )
+            return
+
+        # Mode B: Create new VPC
         self.vpc_flow_log_group_policy = iam.ManagedPolicy(
             self,
             self.stack_env + "-vpc-flow-log-group-policy",
