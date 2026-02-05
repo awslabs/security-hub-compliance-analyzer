@@ -16,10 +16,7 @@ The stack is parameterized to allow configuration via CDK context for
 the target AWS account and region.
 """
 
-from typing import List
-import os
 import cdk_nag as cdknag
-import aws_cdk as cdk
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as targets
@@ -127,7 +124,7 @@ class ShcaStack(Stack):
         self.__create_cloudwatch_event_rule_for_state_machine()
         self.__cdk_output_variables()
 
-    def __create_kms_key(self) -> kms.Key:
+    def __create_kms_key(self) -> None:
         self.kms_key = kms.Key(
             self,
             id=self.stack_env + "-kms-key",
@@ -150,7 +147,7 @@ class ShcaStack(Stack):
             encryption_key=self.kms_key,
         )
 
-    def __create_vpc(self) -> ec2.Vpc:
+    def __create_vpc(self) -> None:
         self.vpc_flow_log_group_policy = iam.ManagedPolicy(
             self,
             self.stack_env + "-vpc-flow-log-group-policy",
@@ -174,14 +171,15 @@ class ShcaStack(Stack):
             self.stack_env + "-vpc-flow-log-group-role",
             role_name=self.stack_env + "-Vpc-Flow-Log-Group-Role",
             description="",
-            assumed_by=iam.ServicePrincipal("vpc-flow-logs.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-vpc-flow-log-group-policy-arn",
-                    managed_policy_arn=self.vpc_flow_log_group_policy.managed_policy_arn,
-                ),
-            ],
+            assumed_by=iam.ServicePrincipal(
+                "vpc-flow-logs.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
+            managed_policies=[self.vpc_flow_log_group_policy],
         ).without_policy_updates()
 
         self.vpc = ec2.Vpc(
@@ -223,45 +221,18 @@ class ShcaStack(Stack):
             description="Allow HTTPS from VPC CIDR Block",
         )
 
-        self.vpc.add_interface_endpoint(
-            self.stack_env + "-KmsFipsEndpoint",
-            service=ec2.InterfaceVpcEndpointAwsService.KMS_FIPS,
-            private_dns_enabled=True,
-            security_groups=[self.vpc_endpoint_security_group],
-        )
-
         self.vpc.add_gateway_endpoint(
             self.stack_env + "-S3GatewayEndpoint",
             service=ec2.GatewayVpcEndpointAwsService.S3,
         )
 
-        self.vpc.add_interface_endpoint(
-            self.stack_env + "-SecurityHubEndpoint",
-            service=ec2.InterfaceVpcEndpointAwsService.SECURITYHUB,
-            private_dns_enabled=True,
-            security_groups=[self.vpc_endpoint_security_group],
-        )
-
-        # self.vpc.add_interface_endpoint(
-        #     self.stack_env + "-Ec2Endpoint",
-        #     service=ec2.InterfaceVpcEndpointAwsService.EC2,
-        #     private_dns_enabled=True,
-        #     security_groups=[self.vpc_endpoint_security_group],
-        # )
-
-        self.vpc.add_interface_endpoint(
-            self.stack_env + "-CloudWatchLogsEndpoint",
-            service=ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
-            private_dns_enabled=True,
-            security_groups=[self.vpc_endpoint_security_group],
-        )
-
-        self.vpc.add_interface_endpoint(
-            self.stack_env + "-StepFunctionsEndpoint",
-            service=ec2.InterfaceVpcEndpointAwsService.STEP_FUNCTIONS,
-            private_dns_enabled=True,
-            security_groups=[self.vpc_endpoint_security_group],
-        )
+        if self.partition != "aws-iso-b":
+            self.vpc.add_interface_endpoint(
+                self.stack_env + "-SecurityHubEndpoint",
+                service=ec2.InterfaceVpcEndpointAwsService.SECURITYHUB,
+                private_dns_enabled=True,
+                security_groups=[self.vpc_endpoint_security_group],
+            )
 
     def __create_s3_bucket(self) -> None:
         self.s3_resource_bucket = s3.Bucket(
@@ -299,7 +270,7 @@ class ShcaStack(Stack):
             ],
         )
 
-    def __create_lambda_security_group(self) -> ec2.SecurityGroup:
+    def __create_lambda_security_group(self) -> None:
         """Create a security group for Lambda functions"""
         self.lambda_security_group = ec2.SecurityGroup(
             self,
@@ -329,7 +300,7 @@ class ShcaStack(Stack):
             description="Allow HTTPS to VPC CIDR Block",
         )
 
-    def __create_aws_sdk_for_pandas_layer(self) -> lambda_.LayerVersion:
+    def __create_aws_sdk_for_pandas_layer(self) -> None:
         """Creates the AWS SDK for Pandas layer"""
         self.aws_sdk_for_pandas_layer = lambda_.LayerVersion(
             self,
@@ -338,13 +309,13 @@ class ShcaStack(Stack):
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_11],
         )
 
-    def __create_sns_topic(self) -> sns.Topic:
+    def __create_sns_topic(self) -> None:
         """Creates SNS topic for failure notifications"""
         self.sns_topic = sns.Topic(
             self,
             self.stack_env + "-sns-topic",
             topic_name=self.stack_env + "-SNS-Topic",
-            display_name=self.stack_env,
+            display_name=self.stack_env + " - StepFunction Failure Notification",
             master_key=self.kms_key,
         )
 
@@ -364,28 +335,16 @@ class ShcaStack(Stack):
             encryption=sqs.QueueEncryption.KMS_MANAGED,
         )
 
-    def __create_managed_policies(self) -> List[iam.ManagedPolicy]:
+    def __create_managed_policies(self) -> None:
         """
         Creates IAM managed policies required by the application.
 
         This method defines several IAM managed policies for Lambda
         function execution roles, including policies for Security Hub, KMS,
-        S3, SQS and SNS. The policies are returned as a list.
+        S3, SQS and SNS.
         """
         # Construct S3 bucket ARN
         s3_bucket_arn = self.s3_resource_bucket.bucket_arn
-
-        # Account ID
-        account_id = os.environ["CDK_DEFAULT_ACCOUNT"]
-
-        # Determine the partition dynamically
-        region = os.environ["CDK_DEFAULT_REGION"]
-        if region.startswith("us-gov-"):
-            partition = "aws-us-gov"
-        elif region.startswith("cn-"):
-            partition = "aws-cn"
-        else:
-            partition = "aws"
 
         self.security_hub_lambda_policy = iam.ManagedPolicy(
             self,
@@ -400,8 +359,8 @@ class ShcaStack(Stack):
                         "securityhub:DescribeStandardsControls",
                     ],
                     resources=[
-                        f"arn:{partition}:securityhub:{region}:{account_id}:hub/default",
-                        f"arn:{partition}:securityhub:{region}:{account_id}:product/*",
+                        f"arn:{self.partition}:securityhub:{self.region}:{self.account}:hub/default",
+                        f"arn:{self.partition}:securityhub:{self.region}:{self.account}:product/*",
                     ],
                     effect=iam.Effect.ALLOW,
                     sid="SecurityHubLambdaPolicy",
@@ -527,8 +486,14 @@ class ShcaStack(Stack):
             self,
             self.stack_env + "-config-rules-scrape-function-role",
             role_name=self.stack_env + "-Config-Rules-Scrape-Function-Role",
-            description="",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaBasicExecutionRole"
@@ -600,8 +565,14 @@ class ShcaStack(Stack):
             self,
             self.stack_env + "-parse-nist-controls-function-role",
             role_name=self.stack_env + "-Parse-Nist-Controls-Function-Role",
-            description="",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaBasicExecutionRole"
@@ -669,8 +640,14 @@ class ShcaStack(Stack):
             self,
             self.stack_env + "-create-summary-function-role",
             role_name=self.stack_env + "-Create-Summary-Function-Role",
-            description="",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaBasicExecutionRole"
@@ -739,7 +716,14 @@ class ShcaStack(Stack):
             self,
             self.stack_env + "-create-package-artifacts-function-role",
             role_name=self.stack_env + "-Package-Artifacts-Function-Role",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaBasicExecutionRole"
@@ -809,7 +793,14 @@ class ShcaStack(Stack):
             self,
             self.stack_env + "-create-ocsf-function-function-role",
             role_name=self.stack_env + "-Create-OCSF-Function-Role",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaBasicExecutionRole"
@@ -874,7 +865,14 @@ class ShcaStack(Stack):
             self,
             self.stack_env + "-create-oscal-function-function-role",
             role_name=self.stack_env + "-Create-OSCAL-Function-Role",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "lambda.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaBasicExecutionRole"
@@ -938,8 +936,9 @@ class ShcaStack(Stack):
             encryption_key=self.kms_key,
         )
 
-    def __create_states_managed_policy(self):
+    def __create_states_managed_policy(self) -> None:
         """Creates a managed policy for Step Functions IAM role."""
+        # https://docs.aws.amazon.com/step-functions/latest/dg/cw-logs.html#cloudwatch-iam-policy
         self.states_policy = iam.ManagedPolicy(
             self,
             self.stack_env + "-states-policy",
@@ -949,6 +948,7 @@ class ShcaStack(Stack):
                     actions=[
                         "logs:CreateLogDelivery",
                         "logs:DeleteLogDelivery",
+                        "logs:CreateLogStream",
                         "logs:DescribeLogGroups",
                         "logs:DescribeResourcePolicies",
                         "logs:GetLogDelivery",
@@ -958,7 +958,7 @@ class ShcaStack(Stack):
                         "logs:PutLogEvents",
                     ],
                     effect=iam.Effect.ALLOW,
-                    resources=[self.step_function_log_group.log_group_arn],
+                    resources=["*"],
                     sid="LogsPolicy",
                 ),
                 iam.PolicyStatement(
@@ -979,14 +979,20 @@ class ShcaStack(Stack):
             ],
         )
 
-    def __create_state_machine(self):
+    def __create_state_machine(self) -> None:
         """Creates the Step Functions state machine."""
         self.state_machine_role = iam.Role(
             self,
             self.stack_env + "-state-machine-role",
             role_name=self.stack_env + "-State-Machine-Role",
-            description="",
-            assumed_by=iam.ServicePrincipal("states.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal(
+                "states.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
             managed_policies=[
                 iam.ManagedPolicy.from_managed_policy_arn(
                     self,
@@ -1030,11 +1036,13 @@ class ShcaStack(Stack):
             self.stack_env + "-4-package-artifacts",
             lambda_function=self.create_package_artifacts_function,
         )
+
         step_5_job = stepfunctions_tasks.LambdaInvoke(
             self,
             self.stack_env + "-5-create-ocsf",
             lambda_function=self.create_ocsf_function,
         )
+
         step_6_job = stepfunctions_tasks.LambdaInvoke(
             self,
             self.stack_env + "-6-create-oscal",
@@ -1059,26 +1067,11 @@ class ShcaStack(Stack):
         ).next(fail_state)  # Chain the Fail state after SNS notification
 
         step_1_job.add_catch(fail_task, result_path="$.taskresult")
-        step_2_job.add_catch(
-            fail_task,
-            result_path="$.taskresult",
-        )
-        step_3_job.add_catch(
-            fail_task,
-            result_path="$.taskresult",
-        )
-        step_4_job.add_catch(
-            fail_task,
-            result_path="$.taskresult",
-        )
-        step_5_job.add_catch(
-            fail_task,
-            result_path="$.taskresult",
-        )
-        step_6_job.add_catch(
-            fail_task,
-            result_path="$.taskresult",
-        )
+        step_2_job.add_catch(fail_task, result_path="$.taskresult")
+        step_3_job.add_catch(fail_task, result_path="$.taskresult")
+        step_4_job.add_catch(fail_task, result_path="$.taskresult")
+        step_5_job.add_catch(fail_task, result_path="$.taskresult")
+        step_6_job.add_catch(fail_task, result_path="$.taskresult")
 
         # Create Step Functions Chain
         chain = (
@@ -1106,7 +1099,7 @@ class ShcaStack(Stack):
             role=self.state_machine_role,
         )
 
-    def __create_cloudwatch_event_rule_for_state_machine(self):
+    def __create_cloudwatch_event_rule_for_state_machine(self) -> None:
         """
         Creates a CloudWatch Events rule for the state machine.
 
@@ -1134,14 +1127,15 @@ class ShcaStack(Stack):
             self.stack_env + "-event-role",
             role_name=self.stack_env + "-Event-Role",
             description="",
-            assumed_by=iam.ServicePrincipal("events.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-events-policy-arn",
-                    managed_policy_arn=self.events_policy.managed_policy_arn,
-                ),
-            ],
+            assumed_by=iam.ServicePrincipal(
+                "events.amazonaws.com",
+                conditions={
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                    }
+                },
+            ),
+            managed_policies=[self.events_policy],
         ).without_policy_updates()
 
         self.shca_event_rule = events.Rule(
@@ -1150,10 +1144,6 @@ class ShcaStack(Stack):
             rule_name=self.stack_env + "-event-rule",
             schedule=events.Schedule.rate(Duration.days(self.schedule_frequency_days)),
         )
-
-        # GovCloud regions don't support tags on EventBridge rules
-        if self.region and self.region.startswith("us-gov-"):
-            cdk.Tags.of(self.shca_event_rule).remove("Application")
 
         self.shca_event_rule.add_target(
             targets.SfnStateMachine(
@@ -1165,7 +1155,7 @@ class ShcaStack(Stack):
             Tags.of(self.shca_event_rule).remove("Application")
 
     # ------------------------------------------------------------------------------------
-    def __cdk_output_variables(self):
+    def __cdk_output_variables(self) -> None:
         """Defines CDK output variables for stack resources."""
         CfnOutput(
             self,
