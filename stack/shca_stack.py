@@ -27,7 +27,6 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subscriptions
-from aws_cdk import aws_sqs as sqs
 from aws_cdk import aws_stepfunctions as stepfunctions
 from aws_cdk import aws_stepfunctions_tasks as stepfunctions_tasks
 from aws_cdk import CfnOutput
@@ -109,7 +108,6 @@ class ShcaStack(Stack):
         self.__create_lambda_security_group()
         self.__create_aws_sdk_for_pandas_layer()
         self.__create_sns_topic()
-        self.__create_dead_letter_queue()
         self.__create_managed_policies()
         self.__create_1_config_rules_scrape_function()
         self.__create_2_parse_nist_controls_function()
@@ -319,21 +317,14 @@ class ShcaStack(Stack):
             master_key=self.kms_key,
         )
 
-        if self.send_failure_notification_email:
+        if (
+            self.send_failure_notification_email and
+            self.failure_notification_email and
+            self.failure_notification_email != "youremail@yourdomain.com" # Should not be the same as the default value
+        ):
             self.sns_topic.add_subscription(
                 subscriptions.EmailSubscription(self.failure_notification_email)
             )
-
-    def __create_dead_letter_queue(self) -> sqs.Queue:
-        """Creates SQS dead letter queue"""
-        self.dead_letter_queue = sqs.Queue(
-            self,
-            self.stack_env + "-dead-letter-queue",
-            queue_name=self.stack_env + "-Dead-Letter-Queue",
-            visibility_timeout=Duration.seconds(30),
-            retention_period=Duration.days(7),
-            encryption=sqs.QueueEncryption.KMS_MANAGED,
-        )
 
     def __create_managed_policies(self) -> None:
         """
@@ -365,17 +356,6 @@ class ShcaStack(Stack):
                     effect=iam.Effect.ALLOW,
                     sid="SecurityHubLambdaPolicy",
                 ),
-                iam.PolicyStatement(
-                    actions=[
-                        "s3:GetObject",
-                        "s3:PutObject",
-                        "s3:ListBucket",
-                        "s3:DeleteObject",
-                    ],
-                    resources=[s3_bucket_arn, f"{s3_bucket_arn}/*"],
-                    effect=iam.Effect.ALLOW,
-                    sid="S3AccessPolicy",
-                ),
             ],
         )
 
@@ -404,40 +384,13 @@ class ShcaStack(Stack):
                 iam.PolicyStatement(
                     actions=[
                         "s3:GetObject",
-                        "s3:GetObjectVersion",
                         "s3:PutObject",
-                        "s3:PutObjectAcl",
                         "s3:ListBucket",
-                        "s3:ListBucketVersions",
                     ],
                     effect=iam.Effect.ALLOW,
-                    resources=[self.s3_resource_bucket.bucket_arn + "/*"],
+                    resources=[s3_bucket_arn, f"{s3_bucket_arn}/*"],
                     sid="S3LambdaPolicy",
                 ),
-                iam.PolicyStatement(
-                    actions=[
-                        "s3:ListBucket",
-                    ],
-                    effect=iam.Effect.ALLOW,
-                    resources=[self.s3_resource_bucket.bucket_arn],
-                    sid="BucketPolicy",
-                ),
-            ],
-        )
-
-        self.sqs_policy = iam.ManagedPolicy(
-            self,
-            self.stack_env + "-sqs-policy",
-            managed_policy_name=self.stack_env + "-SQS-Policy",
-            statements=[
-                iam.PolicyStatement(
-                    actions=[
-                        "sqs:SendMessage",
-                    ],
-                    effect=iam.Effect.ALLOW,
-                    resources=[self.dead_letter_queue.queue_arn],
-                    sid="SQSPolicy",
-                )
             ],
         )
 
@@ -457,23 +410,50 @@ class ShcaStack(Stack):
             ],
         )
 
-        self.step_function_policy = iam.ManagedPolicy(
+        # https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html#configuration-vpc-best-practice-security
+        self.vpc_best_practice_security = iam.ManagedPolicy(
             self,
-            self.stack_env + "-step-function-policy",
-            managed_policy_name=self.stack_env + "-Step-Function-Policy",
+            self.stack_env + "-vpc-best-practice-policy",
+            managed_policy_name=self.stack_env + "-VPC-Best-Practice-Policy",
             statements=[
                 iam.PolicyStatement(
                     actions=[
-                        "states:SendTaskSuccess",
+                        "ec2:CreateNetworkInterface",
+                        "ec2:DeleteNetworkInterface",
+                        "ec2:DescribeNetworkInterfaces",
+                        "ec2:DescribeSubnets",
+                        "ec2:DetachNetworkInterface",
+                        "ec2:AssignPrivateIpAddresses",
+                        "ec2:UnassignPrivateIpAddresses",
                     ],
-                    effect=iam.Effect.ALLOW,
+                    effect=iam.Effect.DENY,
                     resources=["*"],
-                    sid="StepFunctionPolicy",
+                    conditions={
+                        "ArnLike": {
+                            "lambda:SourceFunctionArn": [f"arn:{self.partition}:lambda:{self.region}:{self.account}:function:*"]
+                        }
+                    },
+                    sid="VPCBestPracticePolicy",
                 )
             ],
         )
 
-    def __create_1_config_rules_scrape_function(self) -> lambda_.Function:
+        # AWS-managed policies
+        self.lambda_basic_execution_policy = iam.ManagedPolicy.from_aws_managed_policy_name(
+            "service-role/AWSLambdaBasicExecutionRole"
+        )
+        self.lambda_vpc_access_policy = iam.ManagedPolicy.from_aws_managed_policy_name(
+            "service-role/AWSLambdaVPCAccessExecutionRole"
+        )
+
+    def __get_lambda_environment(self) -> dict:
+        """Get base Lambda environment variables"""
+        env = {"BUCKET_NAME": self.s3_resource_bucket.bucket_name}
+        if self.partition == "aws-iso-b":
+            env["AWS_CA_BUNDLE"] = "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+        return env
+
+    def __create_1_config_rules_scrape_function(self) -> None:
         """
         Creates a Lambda function responsible for making API calls to Security Hub
         to retrieve the latest active compliance findings and disabled rules.
@@ -495,38 +475,16 @@ class ShcaStack(Stack):
                 },
             ),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-1-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-1-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-1-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-1-security-hub-policy-arn",
-                    managed_policy_arn=self.security_hub_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
+                self.security_hub_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
-        self.config_rules_scrape_function = lambda_.Function(
-            self,
-            self.stack_env + "-config-rules-scrape-function",
+        func_kwargs = dict(
             function_name=self.stack_env + "-Config-Rules-Scrape",
             description="1-Retrieve data from AWS Security Hub and export ASFF format.",
             runtime=lambda_.Runtime.PYTHON_3_11,
@@ -535,22 +493,48 @@ class ShcaStack(Stack):
             timeout=Duration.minutes(10),
             memory_size=4096,
             ephemeral_storage_size=Size.mebibytes(4096),
-            vpc=self.vpc,
-            vpc_subnets=ec2.SubnetSelection(
-                subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
-            ),
-            security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            retry_attempts=0,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
-            reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
-            role=self.config_rules_scrape_function_role,
+            environment=self.__get_lambda_environment(),
             environment_encryption=self.kms_key,
+            reserved_concurrent_executions=1,
+            role=self.config_rules_scrape_function_role,
         )
 
-    def __create_2_parse_nist_controls_function(self) -> lambda_.Function:
+        if self.partition != "aws-iso-b":
+            func_kwargs.update(
+                vpc=self.vpc,
+                vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_ISOLATED),
+                security_groups=[self.lambda_security_group],
+            )
+
+        self.config_rules_scrape_function = lambda_.Function(
+            self,
+            self.stack_env + "-config-rules-scrape-function",
+            **func_kwargs
+        )
+
+        if self.partition == "aws-iso-b":
+            cdknag.NagSuppressions.add_resource_suppressions(
+                construct=self.config_rules_scrape_function,
+                suppressions=[
+                    {
+                        "id": "NIST.800.53.R5-LambdaInsideVPC",
+                        "reason": "VPC Endpoint for Security Hub not available",
+                    },
+                ],
+            )
+
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.config_rules_scrape_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
+        )
+
+    def __create_2_parse_nist_controls_function(self) -> None:
         """
         Creates the Lambda function that parses NIST controls.
 
@@ -574,27 +558,11 @@ class ShcaStack(Stack):
                 },
             ),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-2-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-2-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-2-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
@@ -615,17 +583,24 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            retry_attempts=0,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
+            environment=self.__get_lambda_environment(),
+            environment_encryption=self.kms_key,
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
             role=self.parse_nist_controls_function_role,
-            environment_encryption=self.kms_key,
         )
 
-    def __create_3_create_summary_function(self) -> lambda_.Function:
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.parse_nist_controls_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
+        )
+
+    def __create_3_create_summary_function(self) -> None:
         """
         Creates the Lambda function that generates a summary.
 
@@ -649,27 +624,11 @@ class ShcaStack(Stack):
                 },
             ),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-3-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-3-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-3-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
@@ -690,17 +649,24 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            retry_attempts=0,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
+            environment=self.__get_lambda_environment(),
+            environment_encryption=self.kms_key,
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
             role=self.create_summary_function_role,
-            environment_encryption=self.kms_key,
         )
 
-    def __create_4_package_artifacts_function(self) -> lambda_.Function:
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.create_summary_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
+        )
+
+    def __create_4_package_artifacts_function(self) -> None:
         """
         Creates the Lambda function that packages artifacts.
 
@@ -725,27 +691,11 @@ class ShcaStack(Stack):
                 },
             ),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-4-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-4-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-4-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
@@ -766,17 +716,24 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            retry_attempts=0,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
+            environment=self.__get_lambda_environment(),
+            environment_encryption=self.kms_key,
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
             role=self.create_package_artifacts_function_role,
-            environment_encryption=self.kms_key,
         )
 
-    def __create_5_create_ocsf_function(self):
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.create_package_artifacts_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
+        )
+
+    def __create_5_create_ocsf_function(self) -> None:
         """
         Creates an AWS Lambda function to generate an OCSF version of the results.
 
@@ -802,27 +759,11 @@ class ShcaStack(Stack):
                 },
             ),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-5-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-5-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-5-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
@@ -843,17 +784,24 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            retry_attempts=0,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
+            environment=self.__get_lambda_environment(),
+            environment_encryption=self.kms_key,
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
             role=self.create_ocsf_function_role,
-            environment_encryption=self.kms_key,
         )
 
-    def __create_6_create_oscal_function(self):
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.create_ocsf_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
+        )
+
+    def __create_6_create_oscal_function(self) -> None:
         """
         Creates an AWS Lambda function to generate an OCSF (Open Cybersecurity Schema
         Framework) version of the results. Note: By default, AWS Lambda encrypts all
@@ -874,27 +822,11 @@ class ShcaStack(Stack):
                 },
             ),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-6-sqs-policy-arn",
-                    managed_policy_arn=self.sqs_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-6-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-6-s3-policy-arn",
-                    managed_policy_arn=self.s3_lambda_policy.managed_policy_arn,
-                ),
+                self.lambda_basic_execution_policy,
+                self.lambda_vpc_access_policy,
+                self.kms_policy,
+                self.s3_lambda_policy,
+                self.vpc_best_practice_security,
             ],
         ).without_policy_updates()
 
@@ -915,17 +847,24 @@ class ShcaStack(Stack):
             ),
             security_groups=[self.lambda_security_group],
             allow_public_subnet=False,
-            retry_attempts=0,
-            environment={"BUCKET_NAME": self.s3_resource_bucket.bucket_name},
+            environment=self.__get_lambda_environment(),
+            environment_encryption=self.kms_key,
             layers=[self.aws_sdk_for_pandas_layer],
             reserved_concurrent_executions=1,
-            dead_letter_queue_enabled=True,
-            dead_letter_queue=self.dead_letter_queue,
             role=self.create_oscal_function_role,
-            environment_encryption=self.kms_key,
         )
 
-    def __create_step_function_log_group(self):
+        cdknag.NagSuppressions.add_resource_suppressions(
+            construct=self.create_oscal_function,
+            suppressions=[
+                {
+                    "id": "NIST.800.53.R5-LambdaDLQ",
+                    "reason": "Function is invoked synchronously",
+                },
+            ],
+        )
+
+    def __create_step_function_log_group(self) -> None:
         """Creates the log group for Step Functions execution history."""
         self.step_function_log_group = logs.LogGroup(
             self,
@@ -994,23 +933,11 @@ class ShcaStack(Stack):
                 },
             ),
             managed_policies=[
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-states-policy-arn",
-                    managed_policy_arn=self.states_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-states-kms-policy-arn",
-                    managed_policy_arn=self.kms_policy.managed_policy_arn,
-                ),
-                iam.ManagedPolicy.from_managed_policy_arn(
-                    self,
-                    self.stack_env + "-states-sns-policy-arn",
-                    managed_policy_arn=self.sns_policy.managed_policy_arn,
-                ),
+                self.states_policy,
+                self.kms_policy,
+                self.sns_policy,
             ],
-        )
+        ).without_policy_updates()
 
         # Step functions Definition
         step_1_job = stepfunctions_tasks.LambdaInvoke(
@@ -1162,15 +1089,4 @@ class ShcaStack(Stack):
             "bucket-name",
             description=self.stack_env + " S3 Bucket Name",
             value=self.s3_resource_bucket.bucket_name,
-        )
-
-        cdknag.NagSuppressions.add_resource_suppressions(
-            construct=self.state_machine_role,
-            apply_to_children=True,
-            suppressions=[
-                {
-                    "id": "NIST.800.53.R5-IAMNoInlinePolicy",
-                    "reason": "Temporarily required because of CDK Deploy Order of Operations.",
-                },
-            ],
         )
