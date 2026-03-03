@@ -19,13 +19,31 @@ Security Hub with and the NIST Special Publication 800-53 Revision 5 Security St
 All findings within Security Hub are extracted and saved in JSON.
 
 ### 2-parse-nist-controls (AWS Security Hub Findings Condense and Convert)
-The most recent finding from each control/resource id in the JSON is written to a CSV file for better analysis and readability
+The most recent finding from each control/resource id in the JSON is written to a CSV file for better analysis and readability. The CSV includes a `reason_code` column extracted from the ASFF `Compliance.StatusReasons[0].ReasonCode` field, which is used downstream to identify services with no applicable resources (`CONFIG_EVALUATIONS_EMPTY`).
 
 ### 3-create-summary (AWS Security Hub Summary)
-A summary of all controls is created from the CSV file following the following methodology
-- compliant = all findings for the control have a value of PASSED or have a combination of PASSED and NOT_AVAILABLE
-- non-compliant = all findings for the control have a value of FAILED or a have a combination of FAILED and NOT_AVAILABLE
-- partially compliant = findings for the control have at least one FAILED finding and at least one PASSED finding and possibly findings of NOT_AVAILABLE
+A summary of all controls is created from the CSV file following the following methodology:
+
+**Data Filtering:**
+- NOT_AVAILABLE and WARNING findings are excluded before analysis, as they do not represent actionable compliance results
+- Services not in use are automatically detected and excluded. Security Hub generates findings for all services in a compliance standard, even when no resources exist. These findings carry a `CONFIG_EVALUATIONS_EMPTY` reason code from AWS Config. A service is excluded only if ALL of its findings have this reason code; services with any real evaluations are kept.
+
+**Compliance Status Determination (after filtering):**
+- compliant = all findings for the control have a value of PASSED
+- non-compliant = all findings for the control have a value of FAILED
+- partially compliant = findings for the control have at least one FAILED finding and at least one PASSED finding
+
+**HTML Report:**
+The step generates an HTML executive summary report (`nist80053_analysis_summary.html`) that includes:
+- Monitoring Summary — total accounts, resources, services, and automated security checks
+- Out of Scope — disabled rules, suppressed findings, auto-detected excluded services, and NOT_AVAILABLE/WARNING counts
+- Security Hub Rule Results — pass/fail bar chart and counts
+- Severity of Failed Rules — breakdown by CRITICAL, HIGH, MEDIUM, LOW
+- Finding Summary — failed findings by severity
+- Percentage of Compliant NIST 800-53 Controls — overall compliance score with descriptor
+- Prioritized Action List — top failed rules and resources
+- Compliance Controls Table — per-control status, percentage, rule IDs, and narrative
+- Per-account reports — individual HTML reports and CSVs for each AWS account
 
 ### 4-package-artifacts (Artifact Generation and zip)
 This step creates a file for each NIST SP 800-53 control based on that control's status and stores them in two folders:

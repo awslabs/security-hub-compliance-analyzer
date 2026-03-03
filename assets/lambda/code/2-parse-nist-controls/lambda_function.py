@@ -99,6 +99,13 @@ def parse_findings(findings_dict):
             related_requirements = item["Compliance"].get("RelatedRequirements", [])
 
 
+            # Extract the reason code from the ASFF Compliance.StatusReasons field.
+            # When a service has no applicable resources, Security Hub sets this to
+            # "CONFIG_EVALUATIONS_EMPTY". This is used downstream in step 3 to
+            # auto-detect and exclude services not in use.
+            reason_code = (
+                item.get("Compliance", {}).get("StatusReasons", [{}])[0].get("ReasonCode", "")
+            )
             finding_id = item["Id"].split("/")[-1]
             workflow_state = item.get("WorkflowState", "")
             status = item.get("Workflow", {}).get("Status", "")
@@ -176,7 +183,8 @@ def parse_findings(findings_dict):
                         product_vendor_name,
                         compliance_standard_id,
                         compliance_control_id,
-                        "cloud_resource"
+                        "cloud_resource",
+                        reason_code,
                     ]
                 )
 
@@ -206,7 +214,8 @@ def parse_findings(findings_dict):
             "product_vendor_name",
             "compliance_standard_id",
             "compliance_control_id",
-            "compliance_layer"
+            "compliance_layer",
+            "reason_code",
         ],
     )
 
