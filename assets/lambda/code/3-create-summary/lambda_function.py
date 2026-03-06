@@ -15,6 +15,7 @@ to the S3 bucket under a specified key for later consumption.
 from io import StringIO
 import logging
 import os
+import re
 import tempfile
 from datetime import datetime
 import pandas as pd
@@ -28,6 +29,11 @@ logger.info("Lambda handler started")
 region = os.environ["AWS_REGION"]
 s3_client = boto3.client("s3", region_name=region)
 bucket_name = os.environ["BUCKET_NAME"]
+
+
+def natural_sort_key(text):
+    """Sort key that handles embedded numbers naturally (AC-2 before AC-17)."""
+    return [int(c) if c.isdigit() else c.lower() for c in re.split(r"(\d+)", str(text))]
 
 
 def lambda_handler(event, context):  # pylint: disable=unused-argument
@@ -377,6 +383,13 @@ def create_control_summary_of_findings_data(
         .str.replace("]", "")
         .str.replace("'", "")
     )
+
+    # Natural sort so AC-2 comes before AC-17
+    findings_dataframe_grouped = findings_dataframe_grouped.iloc[
+        findings_dataframe_grouped["compliance_control_id"]
+        .map(natural_sort_key)
+        .argsort()
+    ].reset_index(drop=True)
 
     findings_dataframe_grouped["narrative"] = findings_dataframe_grouped.apply(
         generate_narrative, axis=1
