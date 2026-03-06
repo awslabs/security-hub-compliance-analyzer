@@ -377,7 +377,7 @@ def create_control_summary_of_findings_data(
         try:
             html_dataframe.at[index, "Last Time Assessed"] = pd.to_datetime(
                 row["Last Time Assessed"], utc=True
-            )
+            ).strftime("%B %d, %Y at %I:%M %p %Z")
         except ValueError as e:
             logger.error(
                 "Error converting date string: %s - Error: %s",
@@ -933,6 +933,7 @@ def generate_analysis_summary_report_html_report(
         details summary {{ font-weight: bold; padding: 5px; background-color: #ddd; border-radius: 5px; cursor: pointer; }}
         table {{ width: 100%; border-collapse: collapse; background-color: #ffffff; }}
         th, td {{ padding: 8px; text-align: left; border: 1px solid #ddd; }}
+        td:first-child {{ white-space: nowrap; }}
         tr.fail {{ background-color: #a94442; color: white; }}
         tr.pass {{ background-color: #3c763d; color: white; }}
         .result {{ text-transform: uppercase; font-weight: bold; }}
