@@ -63,6 +63,7 @@ def parse_findings(findings_dict):
     """
     logger.info("Extracting rule id, compliance status, and last observed at.")
     control_compliance = []
+    unmapped_nist_controls = set()
 
     for item in findings_dict:
         generator_id = item["GeneratorId"].split("/")[-1]
@@ -98,7 +99,24 @@ def parse_findings(findings_dict):
 
             related_requirements = item["Compliance"].get("RelatedRequirements", [])
 
+            # Track controls that belong to the NIST standard but have no
+            # RelatedRequirements mapping. These cannot be associated with a
+            # specific NIST control and will be excluded from the report.
+            if not related_requirements:
+                associated = item.get("Compliance", {}).get("AssociatedStandards", [])
+                for std in associated:
+                    if "nist-800-53" in std.get("StandardsId", ""):
+                        unmapped_nist_controls.add(generator_id)
+                        break
 
+
+            # Extract the reason code from the ASFF Compliance.StatusReasons field.
+            # When a service has no applicable resources, Security Hub sets this to
+            # "CONFIG_EVALUATIONS_EMPTY". This is used downstream in step 3 to
+            # auto-detect and exclude services not in use.
+            reason_code = (
+                item.get("Compliance", {}).get("StatusReasons", [{}])[0].get("ReasonCode", "")
+            )
             finding_id = item["Id"].split("/")[-1]
             workflow_state = item.get("WorkflowState", "")
             status = item.get("Workflow", {}).get("Status", "")
@@ -176,7 +194,8 @@ def parse_findings(findings_dict):
                         product_vendor_name,
                         compliance_standard_id,
                         compliance_control_id,
-                        "cloud_resource"
+                        "cloud_resource",
+                        reason_code,
                     ]
                 )
 
@@ -206,7 +225,8 @@ def parse_findings(findings_dict):
             "product_vendor_name",
             "compliance_standard_id",
             "compliance_control_id",
-            "compliance_layer"
+            "compliance_layer",
+            "reason_code",
         ],
     )
 
@@ -241,7 +261,15 @@ def parse_findings(findings_dict):
     # Drop these rows from condensed_data
     control_df = control_df.drop(suppressed_indices)
 
-    return control_df, suppressed_findings
+    # Log unmapped controls
+    if unmapped_nist_controls:
+        logger.info(
+            "Found %d NIST controls with no RelatedRequirements mapping: %s",
+            len(unmapped_nist_controls),
+            sorted(unmapped_nist_controls),
+        )
+
+    return control_df, suppressed_findings, sorted(unmapped_nist_controls)
 
 def upload_dataframe_to_s3(s3_client, dataframe, key):
     """
@@ -309,9 +337,14 @@ def lambda_handler(event, context):
     if findings_dict is None:
         return {"statusCode": 400, "body": json.dumps("Invalid JSON in SecurityHub findings.")}
 
-    control_df, suppressed_findings = parse_findings(findings_dict)
+    control_df, suppressed_findings, unmapped_controls = parse_findings(findings_dict)
     upload_dataframe_to_s3(s3_client, control_df, SECURITYHUB_FINDINGS_CSV_KEY)
     upload_dataframe_to_s3(s3_client, suppressed_findings, SECURITYHUB_SUPPRESSED_FINDINGS_KEY)
+
+    # Write unmapped NIST controls (controls in the standard but missing
+    # RelatedRequirements mappings) so Step 3 can report them
+    unmapped_df = pd.DataFrame({"control_id": unmapped_controls})
+    upload_dataframe_to_s3(s3_client, unmapped_df, "shca/unmapped_controls/unmapped_nist_controls.csv")
 
     #create_zip_file(s3_client, control_df)
 
@@ -326,3 +359,4 @@ def lambda_handler(event, context):
 
 if __name__ == "__main__":
     lambda_handler(None, None)
+
