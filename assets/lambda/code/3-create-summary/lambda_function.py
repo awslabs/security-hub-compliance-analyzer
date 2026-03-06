@@ -1319,7 +1319,7 @@ def generate_analysis_summary_report_html_report(
         .summary-title {{ color: var(--aws-dark); font-size: 1.15rem; font-weight: 600; margin: 0 0 16px 0; padding-bottom: 12px; border-bottom: 1px solid var(--border); }}
         .summary-box p {{ color: var(--text-secondary); font-size: 0.925rem; margin-bottom: 10px; }}
         .bar-container {{ display: flex; background-color: #eaeded; border-radius: 20px; overflow: hidden; margin: 16px 0; height: 32px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.06); }}
-        .bar {{ height: 32px; display: flex; align-items: center; justify-content: center; color: white; padding: 0 12px; font-size: 0.8rem; font-weight: 600; white-space: nowrap; }}
+        .bar {{ height: 100%; display: flex; align-items: center; justify-content: center; color: white; padding: 0 12px; font-size: 0.8rem; font-weight: 600; white-space: nowrap; }}
         .bar.passed {{ background-color: var(--pass-green); }}
         .bar.failed {{ background-color: var(--fail-red); }}
         .bar.critical {{ background-color: var(--critical); }}
