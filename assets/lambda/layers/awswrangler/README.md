@@ -4,7 +4,7 @@ AWS Lambda Layer for AWS SDK for Pandas (AWS Wrangler) does not exist in GovClou
 
 The latest releases can be found here: https://github.com/aws/aws-sdk-pandas/releases/latest
 
-Download the the latest layer zip, for Python 3.11, from the repository and place in this folder before deploying the CDK:
+Download the the latest layer zip, for Python 3.13, from the repository and place in this folder before deploying the CDK:
 
 ```assets/lambda/layers/awswrangler/```
 

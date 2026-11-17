@@ -23,7 +23,7 @@ release_info=$(wget -q --header="Accept: application/vnd.github+json" --header="
 
 # Check if the wget command was successful
 if [ $? -eq 0 ]; then
-  download_url=$(echo "$release_info" | jq -r '.assets[] | select(.name | contains("py3.11.zip")) | .browser_download_url')
+  download_url=$(echo "$release_info" | jq -r '.assets[] | select(.name | contains("py3.13.zip")) | .browser_download_url')
 
   # Check if the jq command was successful
   if [ $? -eq 0 ]; then

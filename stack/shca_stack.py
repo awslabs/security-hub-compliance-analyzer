@@ -61,7 +61,7 @@ class ShcaStack(Stack):
 
         # pylint: disable=line-too-long
         # fmt: off
-        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.18.0-py3.11.zip"
+        self.aws_wrangler_layer = "assets/lambda/layers/awswrangler/awswrangler-layer-3.18.0-py3.13.zip"
 
         # Set variables from cdk context
         self.stack_env = self.node.try_get_context("environment")
@@ -304,7 +304,7 @@ class ShcaStack(Stack):
             self,
             self.stack_env + "-aws-sdk-for-pandas-layer",
             code=lambda_.AssetCode(self.aws_wrangler_layer),
-            compatible_runtimes=[lambda_.Runtime.PYTHON_3_11],
+            compatible_runtimes=[lambda_.Runtime.PYTHON_3_13],
         )
 
     def __create_sns_topic(self) -> None:
@@ -487,7 +487,7 @@ class ShcaStack(Stack):
         func_kwargs = dict(
             function_name=self.stack_env + "-Config-Rules-Scrape",
             description="1-Retrieve data from AWS Security Hub and export ASFF format.",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=lambda_.Runtime.PYTHON_3_13,
             code=lambda_.Code.from_asset("assets/lambda/code/1-config-rules-scrape"),
             handler="lambda_function.lambda_handler",
             timeout=Duration.minutes(10),
@@ -571,7 +571,7 @@ class ShcaStack(Stack):
             self.stack_env + "-parse-nist-controls-function",
             function_name=self.stack_env + "-Parse-NIST-Controls",
             description="2-Extract findings by resource/security control id, save as CSV.",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=lambda_.Runtime.PYTHON_3_13,
             code=lambda_.Code.from_asset("assets/lambda/code/2-parse-nist-controls"),
             handler="lambda_function.lambda_handler",
             timeout=Duration.minutes(10),
@@ -637,7 +637,7 @@ class ShcaStack(Stack):
             self.stack_env + "-create-summary-function",
             function_name=self.stack_env + "-Create-Summary",
             description="3-Analyze prior results and create a summary CSV.",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=lambda_.Runtime.PYTHON_3_13,
             code=lambda_.Code.from_asset("assets/lambda/code/3-create-summary"),
             handler="lambda_function.lambda_handler",
             timeout=Duration.minutes(10),
@@ -704,7 +704,7 @@ class ShcaStack(Stack):
             self.stack_env + "-package-artifacts-function",
             function_name=self.stack_env + "-Package-Artifacts",
             description="4-Package artifacts into .zip file.",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=lambda_.Runtime.PYTHON_3_13,
             code=lambda_.Code.from_asset("assets/lambda/code/4-package-artifacts"),
             handler="lambda_function.lambda_handler",
             timeout=Duration.minutes(10),
@@ -772,7 +772,7 @@ class ShcaStack(Stack):
             self.stack_env + "-create-ocsf-function",
             function_name=self.stack_env + "-Create-OCSF",
             description="5-Create ocsf version of results.",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=lambda_.Runtime.PYTHON_3_13,
             code=lambda_.Code.from_asset("assets/lambda/code/5-create-ocsf"),
             handler="lambda_function.lambda_handler",
             timeout=Duration.minutes(10),
@@ -835,7 +835,7 @@ class ShcaStack(Stack):
             self.stack_env + "-create-oscal-function",
             function_name=self.stack_env + "-Create-OSCAL",
             description="6-Create oscal version of results.",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=lambda_.Runtime.PYTHON_3_13,
             code=lambda_.Code.from_asset("assets/lambda/code/6-create-oscal"),
             handler="lambda_function.lambda_handler",
             timeout=Duration.minutes(10),
