@@ -72,7 +72,7 @@ These files provide comprehensive data about the security state of AWS resources
 
 Here's what you need to install to use the AWS CDK.
 
-Validating Python 3.7 or later, pip, virtualenv, and Node.js Installation on Linux
+Validating Python 3.10 or later, pip, virtualenv, and Node.js Installation on Linux
 
 #### Node.js
 
@@ -86,7 +86,7 @@ Other prerequisites depend on the language in which you develop AWS CDK applicat
 
 #### Python
 
-- Python 3.7 or later including pip and virtualenv
+- Python 3.10 or later including pip and virtualenv
 
 #### Check Python Version
 ```bash
